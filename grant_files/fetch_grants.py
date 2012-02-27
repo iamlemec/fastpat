@@ -1,11 +1,12 @@
+#!/usr/bin/python
+
 import os
 import time
 
-fid = open('dls.txt')
+grant_fname = 'grant_files.txt'
 
 url_list = []
-
-for line in fid:
+for line in open(grant_fname):
   (yr_str,rest) = line.split('_')
 
   if yr_str.startswith('ipgb'):
@@ -13,7 +14,7 @@ for line in fid:
   elif yr_str.startswith('pgb'):
     year = yr_str[3:7]
 
-  url = 'http://commondatastorage.googleapis.com/patents/grantbib/' + year + '/' + line.strip()
+  url = 'http://commondatastorage.googleapis.com/patents/grantbib/{}/{}'.format(year,line.strip())
   url_list.append(url)
 
 for url in url_list:

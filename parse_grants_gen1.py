@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-
 import sys
 import sqlite3
 
@@ -21,7 +20,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -31,7 +30,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?)',patents)
   del patents[:]
 
 # SAX hanlder for gen1 patent grants
@@ -41,7 +40,6 @@ class GrantHandler:
     self.section = ''
 
     self.completed = 0
-    self.multi_assign = 0
 
   def tag(self, name, text):
     if len(text) == 0:
@@ -50,15 +48,13 @@ class GrantHandler:
     if name == 'PATN':
       if self.in_patent:
         if self.patnum[0] == '0':
-          self.patint = int(self.patnum[1:8])
-          self.completed += 1
           self.addPatent()
-
       self.in_patent = True
       self.patnum = ''
       self.file_date = ''
       self.grant_date = ''
-      self.orgname = ''
+      self.class_one = ''
+      self.class_two = ''
     elif name == 'WKU':
       if self.section == 'PATN':
         self.patnum = text
@@ -68,17 +64,20 @@ class GrantHandler:
     elif name == 'ISD':
       if self.section == 'PATN':
         self.grant_date = text
-    elif name == 'NAM':
-      if self.section == 'ASSG':
-        if len(self.orgname) > 0:
-          self.multi_assign += 1
-        self.orgname = text
+    elif name == 'OCL':
+      if self.section == 'CLAS':
+        self.class_str = text
 
   def addPatent(self):
-    orgname_esc = unicode(self.orgname,errors='ignore')
-    #print '{} {} {} {:.60}'.format(self.patint,self.file_date,self.grant_date,orgname_esc)
+    self.completed += 1
 
-    patents.append((self.patint,self.file_date,self.grant_date,orgname_esc))
+    self.patint = self.patnum[1:8]
+    self.class_one = self.class_str[:3]
+    self.class_two = self.class_str[3:6]
+
+    print '{:.8} {} {} {:.3} {:.3}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two)
+
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two))
     if len(patents) == batch_size:
       commitBatch()
 
@@ -98,14 +97,10 @@ class ParserGen1:
       if len(line) == 0 or line[0] == ' ':
         continue
 
-      toks = line.split(' ',1)
-      tag = toks[0]
-      if len(toks) > 1:
-        text = toks[1]
-      else:
-        text = ''
+      tag = line[:4].strip()
+      text = line[5:]
 
-      self.handler.tag(tag.strip(),text.strip())
+      self.handler.tag(tag.rstrip(),text)
 
 # do parsing
 parser = ParserGen1()
@@ -123,7 +118,6 @@ if store_db:
   cur.close()
   conn.close()
 
-print grant_handler.multi_assign
 print grant_handler.completed
 
 

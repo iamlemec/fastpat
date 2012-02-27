@@ -21,7 +21,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -31,7 +31,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?)',patents)
   del patents[:]
 
 # XML codes gen2
@@ -52,9 +52,8 @@ class GrantHandler(handler.ContentHandler):
     self.in_grantdate_sec = False
     self.in_filedate = False
     self.in_filedate_sec = False
-    self.in_orgname = False
-    self.in_orgname_sec = False
-    self.in_orgname_sec2 = False
+    self.in_class_sec = False
+    self.in_class = False
 
     self.completed = 0
     self.multi_assign = 0
@@ -67,18 +66,15 @@ class GrantHandler(handler.ContentHandler):
       self.patnum = ''
       self.grant_date = ''
       self.file_date = ''
-      self.orgname = ''
+      self.class_str = ''
     elif name == 'B110':
       self.in_patnum_sec = True
     elif name == 'B140':
       self.in_grantdate_sec = True
     elif name == 'B220':
       self.in_filedate_sec = True
-    elif name == 'B731':
-      self.in_orgname_sec = True
-    elif name == 'NAM':
-      if self.in_orgname_sec:
-        self.in_orgname_sec2 = True
+    elif name == 'B521':
+      self.in_class = True
     elif name == 'PDAT':
       if self.in_patnum_sec:
         self.in_patnum = True
@@ -86,17 +82,12 @@ class GrantHandler(handler.ContentHandler):
         self.in_grantdate = True
       elif self.in_filedate_sec:
         self.in_filedate = True
-      elif self.in_orgname_sec2:
-        self.in_orgname = True
-        if len(self.orgname) > 0:
-          self.multi_assign += 1
-        self.orgname = ''
+      elif self.in_class_sec:
+        self.in_class = True
 
   def endElement(self, name):
     if name == 'PATDOC':
       if self.patnum[0] == '0':
-        self.patint = int(self.patnum[1:])
-        self.completed += 1
         self.addPatent()
     elif name == 'B110':
       self.in_patnum_sec = False
@@ -104,10 +95,8 @@ class GrantHandler(handler.ContentHandler):
       self.in_grantdate_sec = False
     elif name == 'B220':
       self.in_filedate_sec = False
-    elif name == 'B731':
-      self.in_orgname_sec = False
-    elif name == 'NAM':
-      self.in_orgname_sec2 = False
+    elif name == 'B521':
+      self.in_class_sec = False
     elif name == 'PDAT':
       if self.in_patnum:
         self.in_patnum = False
@@ -115,8 +104,8 @@ class GrantHandler(handler.ContentHandler):
         self.in_grantdate = False
       elif self.in_filedate:
         self.in_filedate = False
-      elif self.in_orgname:
-        self.in_orgname = False
+      elif self.in_class:
+        self.in_class = False
 
   def characters(self, content):
     if self.in_patnum:
@@ -125,14 +114,19 @@ class GrantHandler(handler.ContentHandler):
       self.grant_date += content
     elif self.in_filedate:
       self.file_date += content
-    elif self.in_orgname:
-      self.orgname += content
+    elif self.in_class:
+      self.class_str += content
 
   def addPatent(self):
-    orgname_esc = self.orgname.replace('&amp;','&')
-    #print '{} {} {} {:.60}'.format(self.patint,self.file_date,self.grant_date,orgname_esc)
+    self.completed += 1
 
-    patents.append((self.patint,self.file_date,self.grant_date,orgname_esc))
+    self.patint = self.patnum[1:]
+    self.class_one = self.class_str[:3]
+    self.class_two = self.class_str[3:6]
+
+    print '{:8} {} {} {:.3} {:.3}'.format(self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two)
+
+    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two))
     if len(patents) == batch_size:
       commitBatch()
 
