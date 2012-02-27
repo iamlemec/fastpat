@@ -4,17 +4,20 @@ import os
 import time
 
 grant_fname = 'grant_files.txt'
+grant_url_fmt = 'http://commondatastorage.googleapis.com/patents/grantbib/{}/{}'
 
 url_list = []
 for line in open(grant_fname):
   (yr_str,rest) = line.split('_')
 
-  if yr_str.startswith('ipgb'):
-    year = yr_str[4:8]
-  elif yr_str.startswith('pgb'):
-    year = yr_str[3:7]
+  if line.startswith('ipgb'):
+    year = line[4:8]
+  elif line.startswith('pgb'):
+    year = line[3:7]
+  else:
+    year = line[0:4]
 
-  url = 'http://commondatastorage.googleapis.com/patents/grantbib/{}/{}'.format(year,line.strip())
+  url = grant_url_fmt.format(year,line.strip())
   url_list.append(url)
 
 for url in url_list:
