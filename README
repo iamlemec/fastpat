@@ -1,1 +1,6 @@
 parse patent grant and assignment info from USPTO
+
+db layout:
+  patent: (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)
+  assignment: (patnum int, execdate text, recdate text, conveyance text, assignor text, assignee text)
+

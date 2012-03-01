@@ -3,7 +3,7 @@
 import os
 
 assign_dir = 'assign_files'
-cmd_fmt = './parse_assign_sax.py assign_files/{} 1'
+cmd_fmt = 'pypy parse_assign_sax.py assign_files/{} 1'
 
 gen_files = []
 

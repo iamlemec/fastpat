@@ -2,7 +2,7 @@
 
 import sqlite3
 
-stage = 1
+stage = 0
 
 # open db
 assign_db = 'store/patents.db'
@@ -13,7 +13,7 @@ if stage <= 0:
   print 'Creating primary key on patnum'
 
   # create primary key for patent
-  cur.execute("""create unique index patnum_idx on patent(patnum asc)""")
+  cur.execute("""create unique index patnum_idx on patent (patnum asc)""")
 
 if stage <= 1:
   print 'Transforming patent dates'
@@ -29,6 +29,8 @@ if stage <= 2:
 
   # remove blanks
   cur.execute("""delete from patent where filedate='' or grantdate=''""")
+  cur.execute("""update patent set classone=-1 where typeof(classone)!='integer'""")
+  cur.execute("""update patent set classtwo=-1 where typeof(classtwo)!='integer'""")
   cur.execute("""delete from assignment where execdate=''""")
 
   # special
@@ -51,15 +53,11 @@ if stage <= 3:
   print 'Merging assignments and patents'
 
   # merge assignments with patents
-  cur.execute("""create table assignment2 as select assignment.patnum,patent.filedate,patent.grantdate,assignment.execdate,assignment.recdate,assignment.conveyance,assignment.assignor,assignment.assignee from assignment left outer join patent on assignment.patnum = patent.patnum """)
+  cur.execute("""create table assignment2 (assign_id int primary key asc, patnum int, filedate text, grantdate text, classone int, classtwo int, execdate text, recdate text, conveyance text, assignor text, assignee text)""")
+  cur.execute("""insert into assignment2 (patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance,assignor,assignee) select assignment.patnum,patent.filedate,patent.grantdate,patent.classone,patent.classtwo,assignment.execdate,assignment.recdate,assignment.conveyance,assignment.assignor,assignment.assignee from assignment left outer join patent on assignment.patnum = patent.patnum """)
   cur.execute("""drop table assignment""")
   cur.execute("""alter table assignment2 rename to assignment""")
   cur.execute("""delete from assignment where filedate is null or grantdate is null""")
-
-if stage <= 4:
-  # remove assignments with the same patnum and execdate, keeping the one with the earliest recdate
-  #cur.execute("""delete from assignment where patnum,execdate,recdate not in (select patnum,execdate,min(recdate) from assignment group by patnum,execdate)""")
-  pass
 
 # close db
 conn.commit()

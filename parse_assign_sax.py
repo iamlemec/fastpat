@@ -33,9 +33,8 @@ assignment_re = re.compile('|'.join(assignment_keys))
 def is_assignment(conv):
   return assignment_re.search(conv) == None
 
-# connect to assignment db
+# connect to patent db
 if store_db:
-# connect to patent grant db
   db_fname = 'store/patents.db'
   assign_cmd = 'insert into assignment values (?,?,?,?,?,?)'
   conn = sqlite3.connect(db_fname)

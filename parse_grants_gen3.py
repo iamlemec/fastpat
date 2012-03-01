@@ -21,7 +21,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, orgname text)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -31,7 +31,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?,?)',patents)
   del patents[:]
 
 # SAX hanlder for gen3 patent grants
@@ -48,9 +48,10 @@ class GrantHandler(handler.ContentHandler):
     self.in_fos = False
     self.in_classnat = False
     self.in_mainclass = False
+    self.in_assignee = False
+    self.in_orgname = False
 
     self.completed = 0
-    self.multi_assign = 0
 
   def endDocument(self):
     pass
@@ -61,6 +62,7 @@ class GrantHandler(handler.ContentHandler):
       self.grant_date = ''
       self.file_date = ''
       self.class_str = ''
+      self.orgname = ''
     elif name == 'publication-reference':
       self.in_pubref = True
     elif name == 'application-reference':
@@ -81,6 +83,12 @@ class GrantHandler(handler.ContentHandler):
         self.in_grantdate = True
       elif self.in_appref:
         self.in_filedate = True
+    elif name == 'assignee':
+      if self.orgname == '':
+        self.in_assignee = True
+    elif name == 'orgname':
+      if self.in_assignee:
+        self.in_orgname = True
 
   def endElement(self, name):
     if name == 'us-patent-grant':
@@ -105,6 +113,10 @@ class GrantHandler(handler.ContentHandler):
         self.in_grantdate = False
       elif self.in_filedate:
         self.in_filedate = False
+    elif name == 'assignee':
+      self.in_assignee = False
+    elif name == 'orgname':
+      self.in_orgname = False
 
   def characters(self, content):
     if self.in_patnum:
@@ -115,6 +127,8 @@ class GrantHandler(handler.ContentHandler):
       self.file_date += content
     if self.in_mainclass:
       self.class_str += content
+    if self.in_orgname:
+      self.orgname += content
 
   def addPatent(self):
     self.completed += 1
@@ -122,10 +136,11 @@ class GrantHandler(handler.ContentHandler):
     self.patint = self.patnum[1:]
     self.class_one = self.class_str[:3]
     self.class_two = self.class_str[3:6]
+    self.orgname_esc = self.orgname.encode('ascii','ignore').upper()
 
-    print '{:7} {} {} {:.3} {:.3}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two)
+    #print '{:7} {} {} {:.3} {:.3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc)
 
-    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two))
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc))
     if len(patents) == batch_size:
       commitBatch()
 
@@ -145,7 +160,6 @@ if store_db:
   cur.close()
   conn.close()
 
-print grant_handler.multi_assign
 print grant_handler.completed
 
 

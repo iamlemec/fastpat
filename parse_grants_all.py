@@ -2,8 +2,8 @@
 
 import os
 
-grant_dir = 'store/grant_files'
-cmd_fmt = './parse_grants_gen{}.py grant_files/{} 1'
+grant_dir = 'grant_files'
+cmd_fmt = 'pypy parse_grants_gen{}.py grant_files/{} 1'
 
 gen1_files = []
 gen2_files = []
@@ -26,18 +26,15 @@ gen3_files.sort()
 for f in gen1_files:
   print '{}: gen 1'.format(f)
   cmd = cmd_fmt.format(1,f)
-  #print cmd
   os.system(cmd)
 
 for f in gen2_files:
   print '{}: gen 2'.format(f)
   cmd = cmd_fmt.format(2,f)
-  #print cmd
   os.system(cmd)
 
 for f in gen3_files:
   print '{}: gen 3'.format(f)
   cmd = cmd_fmt.format(3,f)
-  #print cmd
   os.system(cmd)
 

@@ -20,7 +20,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -30,7 +30,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?,?)',patents)
   del patents[:]
 
 # SAX hanlder for gen1 patent grants
@@ -47,12 +47,13 @@ class GrantHandler:
 
     if name == 'PATN':
       if self.in_patent:
-        if self.patnum[0] == '0':
+        if len(self.patnum) != 0 and self.patnum[0] == '0':
           self.addPatent()
       self.in_patent = True
       self.patnum = ''
       self.file_date = ''
       self.grant_date = ''
+      self.orgname = ''
       self.class_one = ''
       self.class_two = ''
     elif name == 'WKU':
@@ -64,6 +65,9 @@ class GrantHandler:
     elif name == 'ISD':
       if self.section == 'PATN':
         self.grant_date = text
+    elif name == 'NAM':
+      if self.section == 'ASSG':
+        self.orgname = text
     elif name == 'OCL':
       if self.section == 'CLAS':
         self.class_str = text
@@ -74,10 +78,11 @@ class GrantHandler:
     self.patint = self.patnum[1:8]
     self.class_one = self.class_str[:3]
     self.class_two = self.class_str[3:6]
+    self.orgname_esc = self.orgname.encode('ascii','ignore').upper()
 
-    print '{:.8} {} {} {:.3} {:.3}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two)
+    #print '{:.8} {} {} {:.3} {:.3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc)
 
-    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two))
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc))
     if len(patents) == batch_size:
       commitBatch()
 

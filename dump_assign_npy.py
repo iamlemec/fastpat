@@ -40,18 +40,19 @@ cur = conn.cursor()
 
 # allocate output arrays
 vsize = int(cur.execute('select count(*) from assignment').fetchone()[0])
-outp_vec = np.zeros((vsize,6))
+outp_vec = np.zeros((vsize,8))
 conv_sum = np.zeros(4)
 print vsize
 
 # loop through rows
 lnum = 0
-ret = cur.execute('select * from assignment')
+ret = cur.execute('select patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance from assignment')
 for row in ret:
-  (pat_num_str,file_date_str,grnt_date_str,exec_date_str,recd_date_str,conveyance,_,_) = row
+  (pat_num,file_date_str,grnt_date_str,class_one,class_two,exec_date_str,recd_date_str,conveyance) = row
 
-  # patent number
-  pat_num = int(pat_num_str)
+  if type(class_one) != int or type(class_two) != int:
+    print row
+    continue
 
   # parse file, grant, and exec dates
   file_date = make_date(file_date_str)
@@ -64,7 +65,7 @@ for row in ret:
   conv_sum[ctype] += 1
 
   #print (lnum,pat_num,file_date,grnt_date,exec_date,ctype)
-  outp_vec[lnum,:] = (pat_num,file_date,grnt_date,exec_date,recd_date,ctype)
+  outp_vec[lnum,:] = (pat_num,file_date,grnt_date,class_one,class_two,exec_date,recd_date,ctype)
 
   lnum += 1
 
