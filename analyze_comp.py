@@ -1,5 +1,8 @@
 # import stuff
+import numpy as np
 import mecstat as mec
+import scipy.weave as weave
+from scipy.weave import converters
 
 # file names
 fname_comp_npy = 'store/compustat_trans.npy'
@@ -79,26 +82,59 @@ grant_next[has_next] = grant[sel_next]
 prof_diff = prof_next-prof
 has_prof_diff = ~np.isnan(prof_diff)
 
-# construct patent stocks
-rho = 0.9 # anti-depreciation rate of knowledge stock
-kbase = 1.0 # knowledge stock base
-lagmax = 70
-ever_pats = grant > 0
-pat_stock = np.zeros(n_fy)
-sel_t = np.arange(n_fy)
-disc = 1.0
-n_left_vec = np.zeros(lagmax)
+# unique gvkeys
+gvkeys_all = np.unique(gvkey)
+n_firms = len(gvkeys_all)
 
-for t in range(lagmax):
-  sel_t = sel_t[has_next[sel_t]]+1
-  disc *= rho
+# construct firm panel
+age_max = 70 # max age is 60
+firm_panel = -np.ones((n_firms,age_max),dtype=np.int)
+firm_life = np.zeros(n_firms,dtype=np.int)
+weave.inline("""
+int gv_cur = -1;
+int f = -1;
+int gv;
+int base_year;
+int year_idx;
+for (int i = 0; i < n_fy; i++) {
+  gv = gvkey(i);
+  if (gv != gv_cur) {
+    if (f >= 0) firm_life(f) = year_idx+1;
+    gv_cur = gv;
+    base_year = year(i);
+    f++;
+  }
+  year_idx = year(i)-base_year;
+  firm_panel(f,year_idx) = i;
+}
+""",['gvkey','year','firm_panel','firm_life','n_fy'],type_converters=converters.blitz)
+sel_panel = firm_panel != -1
 
-  pat_stock[sel_t] += disc*grant[sel_t-t]
-  ever_pats[sel_t-t-1] |= grant[sel_t] > 0
+# patent stocks
+rho = 0.94 # anti-depreciation rate of knowledge stock
+pat_stock_panel = np.zeros((n_firms,age_max))
+sel_age = firm_panel[:,0] != -1
+pat_stock_panel[sel_age,0] = grant[firm_panel[sel_age,0]]
+for age in range(1,age_max):
+  sel_alive = age < firm_life
+  sel_age = sel_panel[:,age]
+  pat_stock_panel[sel_alive,age] = rho*pat_stock_panel[sel_alive,age-1]
+  pat_stock_panel[sel_age,age] += grant[firm_panel[sel_age,age]]
 
-  n_left = len(sel_t)
-  n_left_vec[t] = n_left
+# map back into flat format
+pat_stock = pat_stock_panel[sel_panel]
 
-  if n_left == 0:
-    break
+# yearly data
+base_year = 1950
+max_year = 2010
+len_year = max_year-base_year+1
+year_vec = np.arange(base_year,max_year+1)
+grant_tot = np.zeros(len_year)
+source_tot = np.zeros(len_year)
+dest_tot = np.zeros(len_year)
+for t in range(len_year):
+  yr = base_year+t
+  grant_tot[t] = np.sum(grant[year==yr])
+  source_tot[t] = np.sum(source[year==yr])
+  dest_tot[t] = np.sum(dest[year==yr])
 

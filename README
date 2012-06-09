@@ -1,6 +1,9 @@
-parse patent grant and assignment info from USPTO. match with compustat data
+Parse patent grant and assignment info from USPTO and match with compustat data.
 
-file descriptions:
++===============================================================================+
+| File descriptions                                                             |
++===============================================================================+
+
   analyze_comp.py: analyze compustat data
   analyze_lags.py: analyze lags between filing and reassignment
   compustat_match.py: match names from patent assignments to compustat names into transfers.db
@@ -22,8 +25,27 @@ file descriptions:
   parse_grants_gen3.py: parse gen3 patent grant data into patents.db
   standardize.py: name standardization routines
 
++===============================================================================+
+| Workflow                                                                      |
++===============================================================================+
 
-db layout:
+  fetch patent grant files: grant_files/fetch_grants.py
+  fix malformed XML in grant files: grant_files/fix_grants_gen2.py and grant_files/fix_grants_gen3.py
+  fetch patent assignment files: assign_files/fetch_assignments.py
+  patent grants parse: parse_grants_all.py
+  patent assignments parse: parse_assign_all.py
+  merge grants/assignments: fix_patent_tables.py
+  flag redundant assignments: flag_assign_dups.py
+  compustat parse: parse_compustat.py
+  match compustat with assignments: compustat_assign_match.py
+  match compustat with grants: compustat_grant_match.py
+  merge compustat data with assign: compustat_merge.py
+  write compustat data to npy: dump_comp_npy.py
+
++===============================================================================+
+| Database layout                                                               |
++===============================================================================+
+
   patents.db:
     patent: (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)
     assignment: (patnum int, execdate text, recdate text, conveyance text, assignor text, assignee text)
@@ -36,24 +58,14 @@ db layout:
   transfers.db:
     transfer: (patnum int, execyear int, assignor_gvkey int, assignee_gvkey int)
 
++===============================================================================+
+| Data sources                                                                  |
++===============================================================================+
 
-data sources:
   assignment_files: patent reassignment data from Google/USPTO
   grant_files: patent grant data from Google/USPTO
   compustat_files: Compustat data since 1950 from WRDS
   other_files:
     naics_co09.csv: concordance between US Patent Classes (USPC) and NAICS codes
     sic_co08.csv: concordance between USPC and SIC codes
-
-
-workflow:
-  patent grants parse: parse_grants_all.py
-  patent assignments parse: parse_assign_all.py
-  merge grants/assignments: fix_patent_tables.py
-  flag redundant assignments: flag_assign_dups.py
-  compustat parse: parse_compustat.py
-  match compustat with assignments: compustat_assign_match.py
-  match compustat with grants: compustat_grant_match.py
-  merge compustat data with assign: compustat_merge.py
-  write compustat data to npy: dump_comp_npy.py
 
