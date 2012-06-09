@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 from xml.sax import handler, make_parser, SAXException
 import re
 import sys

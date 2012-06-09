@@ -10,7 +10,7 @@ import calendar
 db_fname = 'store/patents.db'
 np_fname = 'store/grants.npy'
 
-# date conversion - base 1970/01/01
+# date conversion - base 1950/01/01
 base_date = datetime.date(1950,1,1)
 def make_date(dstr):
   if dstr != None:

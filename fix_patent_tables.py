@@ -52,7 +52,7 @@ if stage <= 3:
 
   # merge assignments with patents
   cur.execute("""create table assignment2 (assign_id int primary key asc, patnum int, filedate text, grantdate text, classone int, classtwo int, execdate text, recdate text, conveyance text, assignor text, assignee text)""")
-  cur.execute("""insert into assignment2 (patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance,assignor,assignee) select assignment.patnum,patent.filedate,patent.grantdate,patent.classone,patent.classtwo,assignment.execdate,assignment.recdate,assignment.conveyance,assignment.assignor,assignment.assignee from assignment left outer join patent on assignment.patnum = patent.patnum """)
+  cur.execute("""insert into assignment2 (patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance,assignor,assignee) select assignment.patnum,patent.filedate,patent.grantdate,patent.classone,patent.classtwo,assignment.execdate,assignment.recdate,assignment.conveyance,assignment.assignor,assignment.assignee from assignment left outer join patent on assignment.patnum = patent.patnum""")
   cur.execute("""drop table assignment""")
   cur.execute("""alter table assignment2 rename to assignment""")
   cur.execute("""delete from assignment where filedate is null or grantdate is null""")

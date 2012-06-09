@@ -11,7 +11,7 @@ import calendar
 db_fname = 'store/patents.db'
 np_fname = 'store/assignments.npy'
 
-# date conversion - base 1970/01/01
+# date conversion - base 1950/01/01
 base_date = datetime.date(1950,1,1)
 def make_date(dstr):
   if dstr != None:
@@ -39,14 +39,14 @@ conn = sqlite3.connect(db_fname)
 cur = conn.cursor()
 
 # allocate output arrays
-vsize = int(cur.execute('select count(*) from assignment').fetchone()[0])
+vsize = int(cur.execute('select count(*) from assignment_use').fetchone()[0])
 outp_vec = np.zeros((vsize,8))
 conv_sum = np.zeros(4)
 print vsize
 
 # loop through rows
 lnum = 0
-ret = cur.execute('select patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance from assignment')
+ret = cur.execute('select patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance from assignment_use')
 for row in ret:
   (pat_num,file_date_str,grnt_date_str,class_one,class_two,exec_date_str,recd_date_str,conveyance) = row
 

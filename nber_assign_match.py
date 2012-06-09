@@ -9,20 +9,21 @@ conn_pats = sqlite3.connect(db_fname_pats)
 cur_pats = conn_pats.cursor()
 
 # connect to compustat db
-db_fname_comp = 'store/compustat.db'
-conn_comp = sqlite3.connect(db_fname_comp)
-cur_comp = conn_comp.cursor()
+db_fname_nber = 'store/nber.db'
+conn_nber = sqlite3.connect(db_fname_nber)
+cur_nber = conn_nber.cursor()
 
 # connect to transfers db
 db_fname_trans = 'store/transfers.db'
 conn_trans = sqlite3.connect(db_fname_trans)
 cur_trans = conn_trans.cursor()
-cur_trans.execute('create table transfer (patnum int, execyear int, assignor_gvkey int, assignee_gvkey int)')
+cur_trans.execute('drop table if exists transfer_nber')
+cur_trans.execute('create table transfer_nber (patnum int, execyear int, assignor_gvkey int, assignee_gvkey int)')
 
 # db commands
-cmd_comp = 'select name from firmname where gvkey=?'
-cmd_key = 'select gvkey,idx,ntoks from firmkey where keyword=?'
-cmd_trans = 'insert into transfer values (?,?,?,?)'
+cmd_key = 'select gvkey,idx,ntoks from gv_keyword where keyword=?'
+cmd_name = 'select name from gv_name where gvkey=?'
+cmd_trans = 'insert into transfer_nber values (?,?,?,?)'
 
 # detect matches
 match_cut = 1.0
@@ -33,16 +34,21 @@ def detect_match(name):
   nkeys = len(keys)
 
   for (key,idx) in zip(keys,range(nkeys)):
-    for (gvkey,pos,ntoks) in cur_comp.execute(cmd_key,(key,)):
+    for (gvkey,pos,ntoks) in cur_nber.execute(cmd_key,(key,)):
       if idx == pos:
         gv_match[gvkey] += 1.0/max(nkeys,ntoks)
 
   gv_out = None
+  best_gv = None
   if len(gv_match) > 0:
     best_gv = max(gv_match,key=gv_match.get)
     best_val = gv_match[best_gv]
     if best_val >= match_cut:
       gv_out = best_gv
+
+  #if gv_out == None and best_gv != None:
+  #  for (name,) in cur_nber.execute(cmd_name,(best_gv,)):
+  #    print '{:8}: {:40.40}: {}'.format(best_gv,name,', '.join(keys))
 
   return gv_out
 
@@ -73,6 +79,9 @@ for (patnum,execyear,assignor,assignee) in cur_pats.execute("""select patnum,str
   if nrec > rec_lim:
     break
 
+  if nrec%50000 == 0:
+    print nrec
+
 # clean up
 if len(transfers) > 0:
   cur_trans.executemany(cmd_trans,transfers)
@@ -82,8 +91,10 @@ conn_trans.commit()
 
 # close dbs
 conn_pats.close()
-conn_comp.close()
+conn_nber.close()
 conn_trans.close()
 
 print match
+print nrec
+print float(match)/float(nrec)
 
