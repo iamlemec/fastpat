@@ -1,4 +1,5 @@
 import sqlite3
+import csv
 from standardize import name_standardize
 
 # file names
@@ -12,14 +13,17 @@ cur = conn.cursor()
 cur.execute('drop table if exists gv_keyword')
 cur.execute('drop table if exists gv_name')
 cur.execute('drop table if exists pdpass_gy')
+cur.execute('drop table if exists assignee_name')
 cur.execute('create table gv_keyword (gvkey int, idx int, keyword text, ntoks int)')
 cur.execute('create table gv_name (gvkey int, name text)')
 cur.execute('create table pdpass_gy (pdpass int, gvkey int, year int)')
+cur.execute('create table assignee_name (pdp_num int, uspto_num int, name text)')
 
 # sqlite insert commands
 firmkey_cmd = 'insert into gv_keyword values (?,?,?,?)'
 firmname_cmd = 'insert into gv_name values (?,?)'
 pdpass_cmd = 'insert into pdpass_gy values (?,?,?)'
+assignee_cmd = 'insert into assignee_name values (?,?,?)'
 
 # open pdpco file
 tsv_fname = 'nber_files/pdpcohdr.tsv'
@@ -102,6 +106,16 @@ if len(dynass_gys) > 0:
 cur.execute("""create unique index gv_keyword_idx on gv_keyword(keyword asc, gvkey asc, idx asc)""")
 cur.execute("""create unique index gv_name_idx on gv_name(gvkey asc)""")
 cur.execute("""create unique index gv_year_idx on pdpass_gy(pdpass asc, year asc)""")
+
+# import assignee file
+tsv_fname = 'nber_files/assignee.asc'
+tsv_reader = csv.reader(open(tsv_fname,'rb'),delimiter='\t',quotechar='\"')
+tsv_reader.next() # skip first line
+assignees = [(pdp_num,uspto_num,unicode(name,errors='replace')) for (_,_,pdp_num,name,uspto_num) in tsv_reader]
+cur.executemany(assignee_cmd,assignees)
+
+# create index on name
+cur.execute('create unique index assignee_name_idx on assignee_name(name asc)')
 
 # close db
 conn.commit()

@@ -52,6 +52,8 @@ for line in csv_fid:
     revenue = None
   if len(rnd) == 0:
     rnd = None
+  if len(naics) == 0:
+    naics = None
 
   firm_years.append((gvkey,year,income,revenue,rnd,naics))
   firm_names.append((gvkey,name))
@@ -108,6 +110,7 @@ cur_key.execute("""create unique index firmkey_idx on firmkey(keyword asc, gvkey
 
 # generate word frequencies
 cur_key.execute("""drop table if exists keyword_freq""")
+cur_key.execute("""drop table if exists weight_total""")
 cur_key.execute("""drop table if exists firmkey2""")
 
 cur_key.execute("""create table keyword_freq(keyword text, weight real)""")

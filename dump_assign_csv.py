@@ -10,7 +10,7 @@ cur = conn.cursor()
 
 outp = open(csv_fname,'w')
 
-ret = cur.execute('select * from assignment')
+ret = cur.execute('select patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance,assignor,assignee from assignment')
 for row in ret:
   row_unicode = u'\"{}\"\n'.format('\",\"'.join([unicode(el) for el in row]))
   outp.write(row_unicode.encode('ascii','ignore'))

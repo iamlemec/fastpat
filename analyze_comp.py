@@ -123,12 +123,13 @@ for age in range(1,age_max):
 
 # map back into flat format
 pat_stock = pat_stock_panel[sel_panel]
+age_vec = 
 
 # yearly data
 base_year = 1950
 max_year = 2010
 len_year = max_year-base_year+1
-year_vec = np.arange(base_year,max_year+1)
+year_vec = np.arange(base_year,max_year+1)  
 grant_tot = np.zeros(len_year)
 source_tot = np.zeros(len_year)
 dest_tot = np.zeros(len_year)
