@@ -148,7 +148,7 @@ if stage <= 2 and run2:
 run3 = True
 if stage <= 3 and run3:
     # year-industry level aggregates
-    naics_level = 'naics3'
+    naics_level = 'naics4'
     yrind_groups = datf_comp.groupby(['year',naics_level])
     yrind_stats = pandas.DataFrame({
       'profit_med'      : yrind_groups['profit'].median(),

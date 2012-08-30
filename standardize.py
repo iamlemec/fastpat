@@ -130,4 +130,36 @@ def detect_match_wgt(name,cur_comp,output=False):
 
   return gv_out
 
+# match firm names for within patent data approach
+fn_match_cut = 0.8
+cmd_tok = 'select firm_num,ntoks from firm_token where tok=? and pos=?'
+cmd_firm = 'insert into firm values (?,?)'
+cmd_ftok = 'insert into firm_token values (?,?,?,?)'
+def fn_match(name,cur_within,next_fn=None,output=False):
+  toks = name_standardize(name)
+  ntoks = len(toks)
+  fn_match = collections.defaultdict(float)
+
+  for (pos,tok) in enumerate(toks):
+    for (fn,nt) in cur_within.execute(cmd_tok,(tok,pos)):
+        fn_match[fn] += 1.0/max(nt,ntoks)
+
+  fn_out = None
+  if len(fn_match) > 0:
+    best_fn = max(fn_match,key=fn_match.get)
+    best_val = fn_match[best_fn]
+    if best_val >= match_cut:
+      fn_out = best_fn
+
+  if next_fn:
+    if fn_out == None:
+      cur_within.execute(cmd_firm,(next_fn,name))
+      cur_within.executemany(cmd_ftok,zip([next_fn]*ntoks,range(ntoks),toks,[ntoks]*ntoks))
+      fn_out = next_fn
+      next_fn += 1
+
+    return (fn_out,next_fn)
+  else:
+    return fn_out
+
 
