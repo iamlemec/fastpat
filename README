@@ -4,25 +4,36 @@ Parse patent grant and assignment info from USPTO and match with compustat data.
 | File descriptions                                                             |
 +===============================================================================+
 
-  analyze_comp.py: analyze compustat data
-  analyze_lags.py: analyze lags between filing and reassignment
-  compustat_match.py: match names from patent assignments to compustat names into transfers.db
+  analyze_patent.py: analyze just patent data
+  analyze_transfer.py: analyze transfer data with firm match
+  analyze_within.py: analyze firm data
+
+  compustat_assign_match.py: match names from patent assignments to compustat names into transfers.db
+  compustat_grant_match.py: match names from patent grants to compustat names into transfers.db
   compustat_merge.py: merge matched assignment data into compustat.db
-  dump_assign_csv.py: write patent assignment data to csv
-  dump_assign_npy.py: write patent assignment data to npy
-  dump_grants_csv.py: write patent grant data to csv
-  dump_grants_npy.py: write patent grant data to npy
-  dump_trans_npy.py: write compustat+transfer data to npy
-  find_assign_dups.py: find assignments between the same entity (old)
-  gen_tables.py: clean patent data and merge grant/assignment data
-  parse_assign_all.py: parse all patent assignment data into patents.db
-  parse_assign_sax.py: parse sax patent assignment data into patents.db
-  parse_firms.py: parse compustat firm data into compustat.db and generate keys
-  parse_nber_keys.py: take pdpcohdr.tsv and generate keywords matched to pdpco
+
   parse_grants_all.py: parse all patent grant data (gen1,gen2,gen3) into patents.db
   parse_grants_gen1.py: parse gen1 patent grant data into patents.db
   parse_grants_gen2.py: parse gen2 patent grant data into patents.db
   parse_grants_gen3.py: parse gen3 patent grant data into patents.db
+
+  parse_assign_all.py: parse all patent assignment data into patents.db
+  parse_assign_sax.py: parse sax patent assignment data into patents.db
+
+  fix_patent_tables.py: fix various issues with patent data
+  find_assign_dups.py: flag assignments between the same entity
+
+  parse_compustat.py: parse compustat data
+
+  parse_nber_grants.py: parse nber grant info
+  parse_nber_info.py: parse ownership info from nber
+
+  patents_match_grants.py: match firms by name from patent grant data
+  patents_match_assign.py: same for assignment names
+  patents_match_compustat.py: same for compustat names
+  patents_match_merge.py: merge all of above into firmyear tables
+  patents_match_tokens.py: generate token frequency from grant names
+
   standardize.py: name standardization routines
 
 +===============================================================================+
@@ -37,10 +48,10 @@ Parse patent grant and assignment info from USPTO and match with compustat data.
   merge grants/assignments: fix_patent_tables.py
   flag redundant assignments: flag_assign_dups.py
   compustat parse: parse_compustat.py
-  match compustat with assignments: compustat_assign_match.py
-  match compustat with grants: compustat_grant_match.py
-  merge compustat data with assign: compustat_merge.py
-  write compustat data to npy: dump_comp_npy.py
+  match grant data: patents_match_grant.py
+  match assign data on top: patents_match_assign.py
+  match compustat data on top: patents_match_compustat.py
+  merge it all together: patents_match_merge.py
 
 +===============================================================================+
 | Database layout                                                               |
@@ -55,8 +66,11 @@ Parse patent grant and assignment info from USPTO and match with compustat data.
     firmname: (gvkey int, name text)
     firmkey: (gvkey int, idx int, keyword text, ntoks int)
 
-  transfers.db:
-    transfer: (patnum int, execyear int, assignor_gvkey int, assignee_gvkey int)
+  within.db:
+    grant_info
+    assignment_info
+    firmyear_info
+    firm
 
 +===============================================================================+
 | Data sources                                                                  |
