@@ -102,8 +102,8 @@ if stage <= 1 and run1:
     trans_size_up[datf_trans_merge['revenue_assignee'].isnull()|datf_trans_merge['revenue_assignor'].isnull()] = np.nan
     trans_age_up = (datf_trans_merge['age_assignee'] > datf_trans_merge['age_assignor']).astype(np.float)
     trans_age_up[datf_trans_merge['age_assignee'].isnull()|datf_trans_merge['age_assignor'].isnull()] = np.nan
-    datf_trans_merge.insert(len(datf_trans_merge),'trans_size_up',trans_size_up)
-    datf_trans_merge.insert(len(datf_trans_merge),'trans_age_up',trans_age_up)
+    datf_trans_merge['trans_size_up'] = trans_size_up
+    datf_trans_merge['trans_age_up'] = trans_age_up
 
     # group by year
     trans_year_groups = datf_trans_merge.groupby('year')
@@ -145,7 +145,7 @@ if stage <= 2 and run2:
     trans_year_frac = datf_size_year_fracs['trans']/datf_year_sums['grant']
 
 # profit statistics
-run3 = True
+run3 = False
 if stage <= 3 and run3:
     # year-industry level aggregates
     naics_level = 'naics4'

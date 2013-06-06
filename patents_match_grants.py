@@ -2,7 +2,7 @@ import sqlite3
 from standardize import fn_match
 
 # reset tables flag
-reset = False
+reset = True
 
 # open dbs
 db_fname_pats = 'store/patents.db'

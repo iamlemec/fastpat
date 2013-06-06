@@ -3,7 +3,7 @@ import sqlite3
 import pandas
 import sys
 import itertools
-import scipy.stats
+import scipy.stats as stats
 
 # execution state
 if len(sys.argv) == 1:
@@ -23,7 +23,7 @@ if stage <= 0 and run0:
 
     # load firm data
     datf = pandas.DataFrame(cur.execute('select firm_num,year,source_exec_pnum,dest_exec_pnum,file_pnum,grant_pnum,income,revenue,rnd,naics from firmyear_info where year>=1950').fetchall(),columns=['fnum','year','source','dest','file','grant','income','revenue','rnd','naics'])
-    firm_info = pandas.DataFrame(data=cur.execute('select firm_num,year_min,year_max,life_span,has_comp,has_revn,has_rnd,has_pats from firm_life').fetchall(),columns=['fnum','zero_year','max_year','life_span','has_comp','has_revn','has_rnd','has_pats'])
+    firm_info = pandas.DataFrame(data=cur.execute('select firm_num,year_min,year_max,life_span,has_comp,has_revn,has_rnd,has_pats,pats_tot from firm_life').fetchall(),columns=['fnum','zero_year','max_year','life_span','has_comp','has_revn','has_rnd','has_pats','pats_tot'])
     # firm_life starts a firm when they file for their first patent and ends 4 years after their last file
 
     # load transfer data
@@ -45,14 +45,14 @@ if stage <= 0 and run0:
     datf_idx = fy_all.merge(datf,how='left',on=['fnum','year']).fillna(value={'file':0,'grant':0,'dest':0,'source':0},inplace=True)
 
     # derivative columns
-    datf_idx = datf_idx.merge(firm_info.filter(['fnum','zero_year','max_year','life_span','has_comp','has_revn','has_rnd','has_pats']),how='left',on='fnum')
+    datf_idx = datf_idx.merge(firm_info.filter(['fnum','zero_year','max_year','life_span','has_comp','has_revn','has_rnd','has_pats','pats_tot']),how='left',on='fnum')
     age = datf_idx['year']-datf_idx['zero_year']
     max_age = age.max()
     trans = datf_idx['source']+datf_idx['dest']
 
     # next period values
     next_year = pandas.DataFrame(data={'fnum': datf_idx['fnum'], 'year': datf_idx['year']+1})
-    next_info = next_year.merge(datf_idx.filter(['fnum','year','file','grant','source','dest']),how='left',on=['fnum','year'])
+    next_info = next_year.merge(datf_idx.filter(['fnum','year','file','grant','source','dest','revenue','income']),how='left',on=['fnum','year'])
 
     # add to table
     datf_idx['age'] = age
@@ -61,13 +61,15 @@ if stage <= 0 and run0:
     datf_idx['grant_next'] = next_info['grant']
     datf_idx['source_next'] = next_info['source']
     datf_idx['dest_next'] = next_info['dest']
+    datf_idx['revenue_next'] = next_info['revenue']
+    datf_idx['income_next'] = next_info['income']
 
 run1 = True
 if stage <= 1 and run1:
     # construct patent stocks
     print 'Constructing patent stocks'
 
-    depr = 0.9
+    depr = 1.0 # orginal 0.9
     datf_idx['stock'] = 0.0
     sel_curr = (datf_idx['age']==0).values
     datf_idx['stock'][sel_curr] = datf_idx['file'][sel_curr].values
@@ -76,7 +78,7 @@ if stage <= 1 and run1:
         sel_curr = (datf_idx['age']==ai).values 
         datf_idx['stock'][sel_curr] = depr*datf_idx['stock'][sel_last].values + datf_idx['file'][sel_curr].values
 
-run2 = False
+run2 = True
 if stage <= 2 and run2:
     # patent fractions
     print 'Firm statistics'
@@ -116,12 +118,20 @@ if stage <= 2 and run2:
     size_year_groups = datf_idx.groupby(('size_bin','year'))
     size_groups = datf_idx.groupby(('size_bin'))
 
+    mean_stock_vec = good_year_groups['stock'].mean()
+    mean_stock = mean_stock_vec[datf_idx['year']].values
+    datf_idx['stock_year_norm'] = datf_idx['stock']/mean_stock
+
     # group by age-year
     median_age_vec = good_year_groups['age'].quantile(0.9)
     median_age = median_age_vec[datf_idx['year']]
     datf_idx['age_bin'] = datf_idx['age'] > median_age
     age_year_groups = datf_idx.groupby(('age_bin','year'))
     age_groups = datf_idx.groupby(('age_bin'))
+
+    mean_age_vec = good_year_groups['age'].mean()
+    mean_age = mean_age_vec[datf_idx['year']].values
+    datf_idx['age_year_norm'] = datf_idx['age']/mean_age
 
     # start aggregating
     year_sums = all_year_groups.sum()
@@ -187,6 +197,9 @@ if stage <= 4 and run4:
 
     naics2_set = list(np.unique(datf_comp['naics2']).values.astype(np.int))
     naics3_set = list(np.unique(datf_comp['naics3']).values.astype(np.int))
+
+    # growth rate
+    datf_comp['growth'] = (datf_comp['revenue_next']-datf_idx['revenue'])/(0.5*(datf_idx['revenue_next']+datf_idx['revenue']))
 
     # select on having R&D
     sel_rnd = datf_comp['has_rnd'].astype(np.bool)

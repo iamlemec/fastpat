@@ -2,6 +2,7 @@
 
 import re
 import collections
+import itertools
 
 # postscripts
 post0 = r"(\bA CORP.|;|,).*$"
@@ -140,9 +141,8 @@ def fn_match(name,cur_within,next_fn=None,output=False):
   ntoks = len(toks)
   fn_match = collections.defaultdict(float)
 
-  for (pos,tok) in enumerate(toks):
-    for (fn,nt) in cur_within.execute(cmd_tok,(tok,pos)):
-        fn_match[fn] += 1.0/max(nt,ntoks)
+  for (fn,nt) in itertools.chain(*[cur_within.execute(cmd_tok,(tok,pos)).fetchall() for (pos,tok) in enumerate(toks)]):
+    fn_match[fn] += 1.0/max(nt,ntoks)
 
   fn_out = None
   if len(fn_match) > 0:
@@ -161,5 +161,4 @@ def fn_match(name,cur_within,next_fn=None,output=False):
     return (fn_out,next_fn)
   else:
     return fn_out
-
 

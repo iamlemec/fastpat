@@ -42,7 +42,7 @@ if reg_num == 1:
 # age-size-year regression on source/dest/file
 if reg_num == 2:
   y_var = 'file_next'
-  y_vec = datf_idx[y_var]
+  y_vec = datf_use[y_var]
   dat = pandas.DataFrame({y_var:y_vec,'year':year,'age':age,'l_stock':l_stock}).dropna()
   dat['intercept'] = 1.0
 

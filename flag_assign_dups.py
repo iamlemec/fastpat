@@ -64,13 +64,6 @@ if store:
   if len(same_flags) > 0:
     cur_same.executemany(cmd_same,same_flags)
 
-  # flag duplicate entries (dup_flag)
-  #cur.execute('drop table if exists assign_dups')
-  #cur.execute('create table assign_dups as select patnum,execdate,max(same_flag) from assignment group by patnum,execdate having count(*)>1')
-  #cur.execute('create unique index assign_dups_idx on assign_dups (patnum,execdate)')
-  #cur.execute('update assignment set dup_flag=1 where rowid in (select assignment.rowid from assignment,assign_dups where assignment.patnum = assign_dups.patnum and assignment.execdate = assign_dups.execdate)')
-  #cur.execute('drop table assign_dups')
-
   # use the first entry that doesn't have same_flag=1
   cur.execute('update assignment set use_flag=1 where rowid in (select min(rowid) from assignment group by patnum,execdate,same_flag) and same_flag=0')
   cur.execute('create table assignment_use as select * from assignment where use_flag=1')
