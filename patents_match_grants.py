@@ -43,8 +43,16 @@ for (patnum,owner) in cur_pats.execute('select patnum,owner from patent_use'):
   if rnum%10000 == 0:
     print rnum
 
+# close and attach patents
+conn_pats.close()
+cur_within.execute('attach ? as patdb',db_fname_pats)
+
+# mere basic grant data
+cur_within.execute('drop table if exists grant_basic')
+cur_within.execute('create table grant_basic (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int)')
+cur_within.execute("""insert into grant_basic select patent_use.patnum,firm_num,strftime(\'%Y\',filedate),strftime(\'%Y\',grantdate),classone,classtwo
+                      from patdb.patent_use left outer join grant_match on (patent_use.patnum = grant_match.patnum)""")
+
 # clean up
 conn_within.commit()
 conn_within.close()
-conn_pats.close()
-

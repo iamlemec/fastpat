@@ -18,13 +18,12 @@ if stage <= 0 and run0:
     print 'Loading data'
 
     # load firm data
-    # firm_life starts a firm when they file for their first patent and ends 4 years after their last file
+    # firm_life starts a firm when they file for their first patent and ends after their last file
     conn = sqlite3.connect('store/within.db')
     cur = conn.cursor()
     datf = pd.DataFrame(cur.execute('select firm_num,year,source_nbulk,source_pnum,dest_nbulk,dest_pnum,file_pnum,income,revenue,rnd,naics from firmyear_info where year>=1950').fetchall(),columns=['fnum','year','source_bulk','source','dest_bulk','dest','file','income','revenue','rnd','naics'])
     firm_info = pd.DataFrame(data=cur.execute('select firm_num,year_min,year_max,life_span,high_tech from firm_life').fetchall(),columns=['fnum','zero_year','max_year','life_span','high_tech'])
     datf_trans = pd.DataFrame(cur.execute('select patnum,execyear,source_fn,dest_fn,grantyear,fileyear from assign_info where execyear>=1950').fetchall(),columns=['patnum','year','source_fn','dest_fn','grantyear','fileyear'],dtype=np.int)
-    #datf_trans = pd.DataFrame(cur.execute('select execyear,source_fn,dest_fn from assign_bulk where execyear>=1950').fetchall(),columns=['year','source_fn','dest_fn'],dtype=np.int)
     conn.close()
 
     # extra stats
@@ -33,16 +32,6 @@ if stage <= 0 and run0:
 
     # make index
     print 'Reindexing'
-
-    #min_year = 1950
-    #max_year = 2013
-    #len_year = max_year-min_year+1
-    #fnum_set = firm_info['fnum'].values
-    #nfirms = len(fnum_set)
-    #all_fnums = np.kron(fnum_set,np.ones(len_year))
-    #all_years = np.kron(np.ones(nfirms),np.arange(min_year,max_year+1))
-    #fy_all = pd.DataFrame({'fnum': all_fnums, 'year': all_years})
-    #datf_idx = fy_all.merge(datf,how='left',on=['fnum','year']).fillna(value={'file':0,'grant':0,'dest':0,'source':0},inplace=True)
 
     fnum_set = firm_info['fnum']
     zero_year = firm_info['zero_year']
@@ -76,7 +65,7 @@ if stage <= 1 and run1:
     datf_idx['patnet'] = datf_idx['file'] + datf_idx['dest'] - datf_idx['source'] - datf_idx['file_expire'] - datf_idx['dest_expire']
     firm_groups = datf_idx.groupby('fnum')
     datf_idx['stock'] = firm_groups['patnet'].cumsum() - datf_idx['patnet']
-    datf_idx = datf_idx[datf_idx['stock']>0]
+    #datf_idx = datf_idx[datf_idx['stock']>0]
 
 # selections and groupings
 run2 = True

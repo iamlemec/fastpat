@@ -30,7 +30,7 @@ if stage <= 0 and run0:
     con_comp.close()
 
     # derivative columns
-    naics3 = np.array([int('{:0<6}'.format(nv)[:3]) for nv in datf_comp['naics']])    
+    naics3 = np.array([int('{:0<6}'.format(nv)[:3]) for nv in datf_comp['naics']])
     naics4 = np.array([int('{:0<6}'.format(nv)[:4]) for nv in datf_comp['naics']])
     zero_year = datf_comp.groupby('gvkey')['year'].min()[datf_comp['gvkey']]
     age = datf_comp['year'].values-zero_year.values

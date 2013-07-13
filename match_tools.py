@@ -1,0 +1,139 @@
+# tools for name matching
+
+# misc commands
+# select firm_num,sum(revenue) as rtot from firm_merge where firm_num>=1000000 group by firm_num order by rtot desc
+# select firm_num,sum(amount) as atot from firm_merge where firm_num>=2000000 group by firm_num order by atot desc
+
+import sqlite3
+import operator as op
+import pandas as pd
+from collections import OrderedDict
+
+def unfurl(v,idx=0):
+  return map(op.itemgetter(idx),v)
+
+def qset(n):
+  return '('+','.join('?'*n)+')'
+
+def argsort(seq):
+  return sorted(range(len(seq)),key=seq.__getitem__)
+
+class infobot:
+  def __init__(self):
+    self.conn = sqlite3.connect('/media/Liquid/data/patents/store/within.db')
+    self.cur = self.conn.cursor()
+
+  def disconnect(self):
+    self.conn.close()
+
+  # find all earlier matches for a specific entry
+  def fnum_info(self,fnum,nshow=10):
+    cur = self.cur
+
+    # get relevant tokens
+    toks = map(op.itemgetter(0),cur.execute('select tok from firm_token where firm_num=?',(fnum,)).fetchall())
+    ntoks = len(toks)
+    print 'Looking up: ' + ' '.join(toks)
+    print
+
+    # clear temporary tables
+    cur.execute('create table if not exists temp_match (firm_num int, ntoks int)')
+    cur.execute('create table if not exists temp_sum (firm_num int, score int)')
+    cur.execute('delete from temp_match')
+    cur.execute('delete from temp_sum')
+
+    # compute best match
+    cur.executemany('insert into temp_match select firm_num,ntoks from firm_token where pos=? and tok=? and firm_num<1000000',enumerate(toks))
+    cur.execute('insert into temp_sum select firm_num,sum(1.0/max(ntoks,?)) from temp_match group by firm_num',(ntoks,))
+    fmatch = cur.execute('select firm_num,score from temp_sum order by score desc').fetchall()
+
+    # display matches
+    for (fn,score) in fmatch[:nshow]:
+      print '{:8.5f}: '.format(score) + ' '.join(map(op.itemgetter(0),cur.execute('select tok from firm_token where firm_num=?',(fn,)).fetchall()))
+
+  def search_token(self,tok,getpats=True,limit=20):
+    cur = self.cur
+
+    # get relevant firms
+    fnums = unfurl(cur.execute('select firm_num from firm_token where tok=?',(tok,)).fetchall())
+    fnums = fnums[:limit]
+    fnames = unfurl([cur.execute('select name from firm where firm_num=?',(fn,)).fetchone() for fn in fnums])
+    if getpats:
+      pats = unfurl([cur.execute('select sum(file_pnum) from firmyear_info where firm_num=?',(fn,)).fetchone() for fn in fnums])
+    else:
+      pats = [0]*len(fnums)
+
+    # output
+    print 'Looking up {}:'.format(tok)
+    print 
+    print '\n'.join(['{:10d},{:10d}: {}'.format(num,pnum,name) for (num,name,pnum) in zip(fnums,fnames,pats)])
+    print
+    print '{} matches'.format(len(fnums))
+
+  def firm_history(self,fnum):
+    cur = self.cur
+
+    cols = ['year','file_pnum','grant_pnum','source_pnum','dest_pnum','source_nbulk','dest_nbulk','employ','revenue','income']
+    datf = pd.DataFrame(cur.execute('select '+','.join(cols)+' from firmyear_info where firm_num=?',(fnum,)).fetchall(),columns=cols)
+    datf['age'] = datf['year']-datf['year'].min()
+    datf['patnet'] = datf['file_pnum']+datf['dest_pnum']-datf['source_pnum']
+    datf['stock'] = datf['patnet'].cumsum() - datf['patnet']
+    datf['file_cum'] = datf['file_pnum'].cumsum() - datf['file_pnum']
+    datf = datf.set_index('year')
+
+    return datf
+
+  def assignments_to(self,fnum):
+    cur = self.cur
+
+    ret = cur.execute("""select execyear,ntrans,firm_source.name from (select * from assign_bulk where dest_fn=?) as firm_assign
+                         left outer join firm as firm_source on (firm_assign.source_fn = firm_source.firm_num) order by execyear""",(fnum,)).fetchall()
+
+    return pd.DataFrame(ret,columns=['year','ntrans','source_name'])
+
+  def assignments_from(self,fnum):
+    cur = self.cur
+
+    ret = cur.execute("""select execyear,ntrans,firm_dest.name from (select * from assign_bulk where source_fn=?) as firm_assign
+                         left outer join firm as firm_dest on (firm_assign.dest_fn = firm_dest.firm_num) order by execyear""",(fnum,)).fetchall()
+
+    return pd.DataFrame(ret,columns=['year','ntrans','dest_name'])
+
+  def word_frequency(self,tok):
+    cur = self.cur
+
+    # get relevant tokens
+    count = cur.execute('select count(*) from firm_token where tok=?',(tok,)).fetchone()[0]
+    mean_pos = cur.execute('select avg(pos) from firm_token where tok=?',(tok,)).fetchone()[0]
+
+    # output
+    print 'Looking up {}:'.format(tok)
+    print 
+    print '{:8d} instances'.format(count)
+    print '{:8.5f} mean position'.format(mean_pos)
+
+  def firm_names(self,fnums,output=False):
+    cur = self.cur
+
+    if not type(fnums) in [list,tuple]: fnums = [fnums]
+
+    fnames = OrderedDict(zip(fnums,['']*len(fnums)))
+    ret = cur.execute('select * from firm where firm_num in ('+','.join(map(str,fnums))+')').fetchall()
+    for (fnum,name) in ret:
+      fnames[fnum] = name
+    fnames = fnames.items()
+
+    if output:
+      for (fnum,name) in fnames:
+        print '{:8d}: {:s}'.format(fnum,name)
+
+    return fnames
+
+  def largest_by_year(self,year,num=25,col='stock'):
+    cur = self.cur
+
+    ret = cur.execute('select firm_num,file from firmyear_info where year=? and ? is not null order by ? desc limit ?',(year,col,col,num)).fetchall()
+
+    print ret
+
+

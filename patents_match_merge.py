@@ -11,21 +11,31 @@ else:
 db_fname_within = 'store/within.db'
 db_fname_pats = 'store/patents.db'
 db_fname_comp = 'store/compustat.db'
-conn = sqlite3.connect(db_fname_within)
-cur = conn.cursor()
+db_fname_maint = 'store/maint.db'
+db_fname_cites = 'store/citations.db'
+con = sqlite3.connect(db_fname_within)
+cur = con.cursor()
 cur.execute('attach ? as patdb',(db_fname_pats,))
 cur.execute('attach ? as compdb',(db_fname_comp,))
+cur.execute('attach ? as maintdb',(db_fname_maint,))
+cur.execute('attach ? as citedb',(db_fname_cites,))
 
 if stage <= 0:
   # merge year data
   print 'Merge with patent data'
 
   cur.execute('drop table if exists grant_info')
-  cur.execute('create table grant_info (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int, high_tech int, ntrans int)')
-  cur.execute("""insert into grant_info select patent_use.patnum,firm_num,strftime(\'%Y\',filedate),strftime(\'%Y\',grantdate),classone,classtwo,0,num_trans.ntrans from patdb.patent_use
-                 left outer join grant_match on (patent_use.patnum = grant_match.patnum)
-                 left outer join (select patnum,count(*) as ntrans from assignment_use group by patnum) as num_trans on (patent_use.patnum = num_trans.patnum)""")
+  cur.execute('create table grant_info (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int, high_tech int, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, life_grant int, life_file int)')
+  cur.execute("""insert into grant_info select grant_basic.patnum,firm_num,fileyear,grantyear,classone,classtwo,0,num_trans.first_trans,num_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.life_span,0 from grant_basic
+                 left outer join (select patnum,min(strftime(\'%Y\',execdate)) as first_trans,count(*) as ntrans from assignment_use group by patnum) as num_trans on (grant_basic.patnum = num_trans.patnum)
+                 left outer join maint on (grant_basic.patnum = maint.patnum)
+                 left outer join cite_stats on (grant_basic.patnum = cite_stats.patnum)""")
   cur.execute('update grant_info set ntrans=0 where ntrans is null')
+  cur.execute('update grant_info set n_cited=0 where n_cited is null')
+  cur.execute('update grant_info set n_self_cited=0 where n_self_cited is null')
+  cur.execute('update grant_info set n_citing=0 where n_citing is null')
+  cur.execute('update grant_info set life_grant=4 where life_grant is null')
+  cur.execute('update grant_info set life_file=life_grant+grantyear-fileyear')
 
   ht_classes = (340,375,379,701,370,345,353,367,381,382,386,235,361,365,700,708,710,713,714,719,318,706,342,343,455,438,711,716,341,712,705,707,715,717)
   cur.execute('update grant_info set high_tech=1 where classone in ('+','.join(map(str,ht_classes))+')')
@@ -74,6 +84,7 @@ if stage <= 2:
         select distinct firm_num,year from source_tot
   union select distinct firm_num,year from dest_tot
   union select distinct firm_num,year from file_tot
+  union select distinct firm_num,year from grant_tot
   union select distinct firm_num,year from compdb.firmyear_match
   """)
 
@@ -118,7 +129,7 @@ if stage <= 4:
 
   cur.execute('drop table if exists firm_life')
   cur.execute('create table firm_life (firm_num int primary key, year_min int, year_max int, life_span int)')
-  cur.execute('insert into firm_life select firm_num,max(1950,min(year)),min(2012,max(year)),0 from firmyear_info where year>=1950 and (file_pnum>0 or source_pnum>0 or dest_pnum>0 or revenue not null) group by firm_num order by firm_num')
+  cur.execute('insert into firm_life select firm_num,max(1950,min(year)),min(2012,max(year)),0 from firmyear_info where year>=1950 and (file_pnum>0 or source_pnum>0) group by firm_num order by firm_num')
   cur.execute('update firm_life set life_span=year_max-year_min+1')
 
   cur.execute('drop table if exists firm_hightech')
@@ -133,6 +144,6 @@ if stage <= 4:
   cur.execute('alter table firm_life2 rename to firm_life')
 
 # clean up
-conn.commit()
-conn.close()
+con.commit()
+con.close()
 
