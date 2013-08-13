@@ -1,64 +1,28 @@
 import sqlite3
-from standardize import name_standardize
+import pandas as pd
+import pandas.io.sql as sqlio
 
 # connect to compustat db
 db_fname_comp = 'store/compustat.db'
-conn = sqlite3.connect(db_fname_comp)
-cur = conn.cursor()
+con = sqlite3.connect(db_fname_comp)
+cur = con.cursor()
 
-# create tables
-cur.execute('drop table if exists firmyear')
-cur.execute('drop table if exists firmname')
-cur.execute('create table firmyear (gvkey int, year int, income real, revenue real, rnd real, employ real, cash real, intan real, naics int, sic int)')
-cur.execute('create table firmname (gvkey int, name text)')
+# read frame into memory
+datf = pd.read_csv('compustat_files/comprehensive2_1950.csv',error_bad_lines=False,skiprows=1,
+                   names=['gvkey','datadate','year','name','assets','capx','cash','cogs','shares',
+                   'deprec','income','employ','intan','debt','prefstock','revenue','sales','rnd',
+                   'fcost','price','naics','sic'])
 
-# sqlite insert commands
-firmyear_cmd = 'insert into firmyear values (?,?,?,?,?,?,?,?,?,?)'
-firmname_cmd = 'insert into firmname values (?,?)'
+# cleanup data
+datf['mktval'] = datf['shares']*datf['price']
+datf = datf.drop(['datadate','shares','prefstock','price'],axis=1)
+datf = datf.fillna({'naics':0})
+datf['naics'] = datf['naics'].map(lambda x: int('{:<6.0f}'.format(x).replace(' ','0')))
+datf = datf[~((datf['naics']>=520000)&(datf['naics']<530000))]
 
-# open file
-csv_fname = 'compustat_files/comprehensive2_1950.csv'
-csv_fid = open(csv_fname,'r')
-
-# store for batch commit
-batch_size = 1
-firm_years = []
-firm_names = []
-firm_toks = []
-
-# counters
-cnum = 0
-
-# parse compustat csv
-firstLine = True
-for line in csv_fid:
-  if firstLine:
-    firstLine = False
-    continue
-
-  (gvkey,_,year,name,_,_,cash,_,_,_,income,employ,intan,_,_,revenue,_,rnd,_,_,naics,sic) = line.strip().split(',')
-
-  # exclude finance and insurance
-  if naics.startswith('52'):
-    continue
-
-  firm_years.append((gvkey,year,income,revenue,rnd,employ,cash,intan,naics,sic))
-  firm_names.append((gvkey,name))
-
-  if len(firm_years) >= batch_size:
-    cur.executemany(firmyear_cmd,firm_years)
-    del firm_years[:]
-  if len(firm_names) >= batch_size:
-    cur.executemany(firmname_cmd,firm_names)
-    del firm_names[:]
-
-  cnum += 1
-
-# flush queue
-if len(firm_years) > 0:
-  cur.executemany(firmyear_cmd,firm_years)
-if len(firm_names) > 0:
-  cur.executemany(firmname_cmd,firm_names)
+# write to sql
+sqlio.write_frame(datf.drop('name',axis=1),'firmyear',con,if_exists='replace')
+sqlio.write_frame(datf[['gvkey','name']],'firmname',con,if_exists='replace')
 
 # clean up and generate primary key on firmyear
 cur.execute("""delete from firmyear where year=''""")
@@ -70,8 +34,5 @@ cur.execute("""delete from firmname where rowid not in (select max(rowid) from f
 cur.execute("""create unique index firmname_idx on firmname(gvkey asc)""")
 
 # close db
-conn.commit()
-conn.close()
-
-print cnum
-
+con.commit()
+con.close()

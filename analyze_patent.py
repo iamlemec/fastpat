@@ -24,7 +24,7 @@ if stage <= 0 and run0:
     datf_trans = pd.DataFrame(cur.execute('select patnum,execyear,recyear,fileyear,grantyear,classone,classtwo from assign_info where execyear>=1950').fetchall(),columns=['patnum','execyear','recyear','fileyear','grantyear','classone','classtwo'],dtype=np.int)
     con.close()
 
-    # cleanup
+    # other stats
     datf_pat = datf_pat.dropna(subset=['fileyear','grantyear'])
     datf_pat['fileyear'] = datf_pat['fileyear'].astype(np.int)
     datf_pat['trans_lag_file'] = datf_pat['first_trans'] - datf_pat['fileyear']

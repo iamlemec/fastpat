@@ -25,8 +25,8 @@ if stage <= 0:
   print 'Merge with patent data'
 
   cur.execute('drop table if exists grant_info')
-  cur.execute('create table grant_info (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int, high_tech int, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, life_grant int, life_file int)')
-  cur.execute("""insert into grant_info select grant_basic.patnum,firm_num,fileyear,grantyear,classone,classtwo,0,num_trans.first_trans,num_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.life_span,0 from grant_basic
+  cur.execute('create table grant_info (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int, high_tech int, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, life_grant int, life_file int, expryear int)')
+  cur.execute("""insert into grant_info select grant_basic.patnum,firm_num,fileyear,grantyear,classone,classtwo,0,num_trans.first_trans,num_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.life_span,0,0 from grant_basic
                  left outer join (select patnum,min(strftime(\'%Y\',execdate)) as first_trans,count(*) as ntrans from assignment_use group by patnum) as num_trans on (grant_basic.patnum = num_trans.patnum)
                  left outer join maint on (grant_basic.patnum = maint.patnum)
                  left outer join cite_stats on (grant_basic.patnum = cite_stats.patnum)""")
@@ -36,6 +36,7 @@ if stage <= 0:
   cur.execute('update grant_info set n_citing=0 where n_citing is null')
   cur.execute('update grant_info set life_grant=4 where life_grant is null')
   cur.execute('update grant_info set life_file=life_grant+grantyear-fileyear')
+  cur.execute('update grant_info set expryear=grantyear+life_grant')
 
   ht_classes = (340,375,379,701,370,345,353,367,381,382,386,235,361,365,700,708,710,713,714,719,318,706,342,343,455,438,711,716,341,712,705,707,715,717)
   cur.execute('update grant_info set high_tech=1 where classone in ('+','.join(map(str,ht_classes))+')')
@@ -66,8 +67,12 @@ if stage <= 1:
   cur.execute('insert into file_tot select firm_num,fileyear,count(*) from grant_info group by firm_num,fileyear')
 
   cur.execute('drop table if exists grant_tot')
-  cur.execute('create table grant_tot (firm_num int, year int, pnum int)')
-  cur.execute('insert into grant_tot select firm_num,grantyear,count(*) from grant_info group by firm_num,grantyear')
+  cur.execute('create table grant_tot (firm_num int, year int, pnum int, n_cited int, n_self_cited int, n_citing int)')
+  cur.execute('insert into grant_tot select firm_num,grantyear,count(*),sum(n_cited),sum(n_self_cited),sum(n_citing) from grant_info group by firm_num,grantyear')
+
+  cur.execute('drop table if exists expire_tot')
+  cur.execute('create table expire_tot (firm_num int, year int, pnum int)')
+  cur.execute('insert into expire_tot select firm_num,expryear,count(*) from grant_info group by firm_num,expryear')
 
 if stage <= 2:
   # get all firm-years
@@ -94,10 +99,13 @@ if stage <= 2:
   from firmyear_all left outer join compustat on firmyear_all.firm_num = compustat.firm_num""")
 
   cur.execute('drop table if exists compustat_match')
-  cur.execute('create table compustat_match (firm_num int, year int, gvkey int, income real, revenue real, rnd real, employ real, cash real, intan real, naics int, sic int)')
+  cur.execute("""create table compustat_match (firm_num int, year int, gvkey int, assets real, capx real,
+                 cash real, cogs real, deprec real, income real, employ real, intan real, debt real,
+                 revenue real, sales real, rnd real, fcost real, mktval real, naics int, sic int)""")
   cur.execute("""insert into compustat_match select firmyear_match.firm_num,firmyear_match.year,firmyear.gvkey,
-  sum(income),sum(revenue),sum(rnd),sum(employ),sum(cash),sum(intan),naics,sic
-  from firmyear_match left outer join compdb.firmyear 
+  sum(assets),sum(capx),sum(cash),sum(cogs),sum(deprec),sum(income),sum(employ),sum(intan),sum(debt),
+  sum(revenue),sum(sales),sum(rnd),sum(fcost),sum(mktval),naics,sic
+  from firmyear_match left outer join compdb.firmyear
   on (firmyear_match.gvkey = firmyear.gvkey and firmyear_match.year = firmyear.year)
   group by firmyear_match.firm_num,firmyear_match.year""")
 
@@ -106,14 +114,18 @@ if stage <= 3:
   print 'Merge fields together'
 
   cur.execute('drop table if exists firmyear_info')
-  cur.execute("""create table firmyear_info (firm_num int, year int, source_nbulk int, source_pnum int, dest_nbulk int, dest_pnum int, file_pnum int, grant_pnum int,
-  income real, revenue real, rnd real, employ real, cash real, intan real, naics int, sic int)""")
+  cur.execute("""create table firmyear_info (firm_num int, year int, source_nbulk int, source_pnum int, dest_nbulk int, dest_pnum int,
+  file_pnum int, grant_pnum int, expire_pnum int, n_cited int, n_self_cited int, n_citing int,
+  assets real, capx real, cash real, cogs real, deprec real, income real, employ real, intan real,
+  debt real, revenue real, sales real, rnd real, fcost real, mktval real, naics int, sic int)""")
   cur.execute("""insert into firmyear_info select firmyear_all.firm_num,firmyear_all.year,
-  source_tot.nbulk,source_tot.pnum,dest_tot.nbulk,dest_tot.pnum,file_tot.pnum,grant_tot.pnum,income,revenue,rnd,employ,cash,intan,naics,sic from firmyear_all
+  source_tot.nbulk,source_tot.pnum,dest_tot.nbulk,dest_tot.pnum,file_tot.pnum,grant_tot.pnum,expire_tot.pnum,n_cited,n_self_cited,n_citing,
+  assets,capx,cash,cogs,deprec,income,employ,intan,debt,revenue,sales,rnd,fcost,mktval,naics,sic from firmyear_all
   left outer join source_tot       on (firmyear_all.firm_num = source_tot.firm_num      and firmyear_all.year = source_tot.year)
   left outer join dest_tot         on (firmyear_all.firm_num = dest_tot.firm_num        and firmyear_all.year = dest_tot.year)
   left outer join file_tot         on (firmyear_all.firm_num = file_tot.firm_num        and firmyear_all.year = file_tot.year)
   left outer join grant_tot        on (firmyear_all.firm_num = grant_tot.firm_num       and firmyear_all.year = grant_tot.year)
+  left outer join expire_tot       on (firmyear_all.firm_num = expire_tot.firm_num      and firmyear_all.year = expire_tot.year)
   left outer join compustat_match  on (firmyear_all.firm_num = compustat_match.firm_num and firmyear_all.year = compustat_match.year)""")
   cur.execute('update firmyear_info set source_nbulk=0 where source_nbulk is null')
   cur.execute('update firmyear_info set source_pnum=0 where source_pnum is null')
@@ -121,6 +133,7 @@ if stage <= 3:
   cur.execute('update firmyear_info set dest_pnum=0 where dest_pnum is null')
   cur.execute('update firmyear_info set file_pnum=0 where file_pnum is null')
   cur.execute('update firmyear_info set grant_pnum=0 where grant_pnum is null')
+  cur.execute('update firmyear_info set expire_pnum=0 where expire_pnum is null')
   cur.execute('delete from firmyear_info where year is null')
 
 if stage <= 4:
@@ -136,14 +149,36 @@ if stage <= 4:
   cur.execute('create table firm_hightech (firm_num int, high_tech real)')
   cur.execute('insert into firm_hightech select firm_num,avg(high_tech) from grant_info group by firm_num')
 
-  cur.execute('drop table if exists firm_life2')
-  cur.execute('create table firm_life2 (firm_num int primary key, year_min int, year_max int, life_span int, high_tech real)')
-  cur.execute("""insert into firm_life2 select firm_life.firm_num,year_min,year_max,life_span,high_tech from firm_life
-  left outer join firm_hightech on firm_life.firm_num = firm_hightech.firm_num""")
+  cur.execute('drop table if exists firm_class_count')
+  cur.execute('create table firm_class_count (firm_num int, class int, count int)')
+  cur.execute('insert into firm_class_count select firm_num,classone,count(*) from grant_info group by firm_num,classone')
+  cur.execute('drop table if exists firm_class_mode')
+  cur.execute('create table firm_class_mode (firm_num int, mode_class int, mode_count int)')
+  # cur.execute('insert into firm_class_mode select * from firm_class_count group by firm_num having count=max(count)') # this works but isn't technically valid, best to avoid
+  # in case of a tie, choose the highest classone number
+  cur.execute('insert into firm_class_mode select firm_num,max(class),max(count) from (select * from firm_class_count where count = (select max(count) from firm_class_count i where i.firm_num = firm_class_count.firm_num)) group by firm_num')
+  cur.execute('drop table firm_class_count')
+  cur.execute('drop table if exists firm_class_mode_2')
+  cur.execute('create table firm_class_mode_2 (firm_num int, mode_class int, mode_count int, tot_pats int, mode_frac real)')
+  cur.execute("""insert into firm_class_mode_2 select firm_class_mode.firm_num,mode_class,mode_count,tot_pats,null from firm_class_mode left outer join
+                 (select firm_num,count(*) as tot_pats from grant_match group by firm_num) as firm_pats
+                 on (firm_class_mode.firm_num = firm_pats.firm_num)""")
+  cur.execute('update firm_class_mode_2 set mode_frac=mode_count*1.0/tot_pats')
+  cur.execute('drop table firm_class_mode')
+  cur.execute('alter table firm_class_mode_2 rename to firm_class_mode')
+
+  cur.execute('drop table if exists firm_life_2')
+  cur.execute('create table firm_life_2 (firm_num int primary key, year_min int, year_max int, life_span int, high_tech real, tot_pats int, mode_class int, mode_frac real)')
+  cur.execute("""insert into firm_life_2 select firm_life.firm_num,year_min,year_max,life_span,high_tech,tot_pats,mode_class,mode_frac from firm_life
+                 left outer join firm_hightech on firm_life.firm_num = firm_hightech.firm_num
+                 left outer join firm_class_mode on firm_life.firm_num = firm_class_mode.firm_num
+                 where tot_pats>0""")
   cur.execute('drop table if exists firm_life')
-  cur.execute('alter table firm_life2 rename to firm_life')
+  cur.execute('alter table firm_life_2 rename to firm_life')
+
+  cur.execute('drop table firm_hightech')
+  cur.execute('drop table firm_class_mode')
 
 # clean up
 con.commit()
 con.close()
-
