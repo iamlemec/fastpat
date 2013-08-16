@@ -6,14 +6,20 @@ import itertools
 
 # execution state
 if len(sys.argv) == 1:
-  stage = 0
+  stage_min = 0
+  stage_max = sys.maxint
+elif len(sys.argv) == 2:
+  stage_min = int(sys.argv[1])
+  stage_max = sys.maxint
 else:
-  stage = int(sys.argv[1])
+  stage_min = int(sys.argv[1])
+  stage_max = int(sys.argv[2])
 
-# load in data from db
-#def main(stage=0):
 run0 = True
-if stage <= 0 and run0:
+run1 = True
+run2 = True
+
+if stage_min <= 0 and stage_max >= 0 and run0:
     # load data
     print 'Loading data'
 
@@ -42,10 +48,10 @@ if stage <= 0 and run0:
     fy_all = pd.DataFrame(data={'fnum': all_fnums, 'year': all_years})
     datf_idx = fy_all.merge(datf,how='left',on=['fnum','year']).fillna(value={'file':0,'dest':0,'source':0,'source_bulk':0,'dest_bulk':0},inplace=True)
 
-    # patent expiry (file + 17)
-    datf_idx['year_17p'] = datf_idx['year'] + 17
-    datf_idx = datf_idx.merge(datf_idx.filter(['fnum','year_17p','file','dest']),how='left',left_on=['fnum','year'],right_on=['fnum','year_17p'],suffixes=('','_expire'))
-    datf_idx = datf_idx.drop(['year_17p','year_17p_expire'],axis=1)
+    # patent expiry (file + 20)
+    datf_idx['year_20p'] = datf_idx['year'] + 20
+    datf_idx = datf_idx.merge(datf_idx[['fnum','year_20p','file','dest']],how='left',left_on=['fnum','year'],right_on=['fnum','year_20p'],suffixes=('','_expire'))
+    datf_idx = datf_idx.drop(['year_20p','year_20p_expire'],axis=1)
     datf_idx = datf_idx.fillna({'file_expire':0,'dest_expire':0})
 
     # derivative columns
@@ -57,8 +63,7 @@ if stage <= 0 and run0:
     #### select only high tech firms ####
     #datf_trans = datf_trans[datf_trans['ht_bin']]
 
-run1 = True
-if stage <= 1 and run1:
+if stage_min <= 1 and stage_max >= 1 and run1:
     # construct patent stocks
     print 'Constructing patent stocks'
 
@@ -67,9 +72,7 @@ if stage <= 1 and run1:
     datf_idx['stock'] = firm_groups['patnet'].cumsum() - datf_idx['patnet']
     #datf_idx = datf_idx[datf_idx['stock']>0]
 
-# selections and groupings
-run2 = True
-if stage <= 2 and run2:
+if stage_min <= 2 and stage_max >= 2 and run2:
     # calculate transfer statistics
     print 'Calculating transfer statistics'
 
@@ -128,13 +131,3 @@ if stage <= 2 and run2:
     trans_age_year_groups = datf_trans_merge.groupby(('age_bin_source','age_bin_dest','year'))
     trans_age_year_sums = trans_age_year_groups.size()
     trans_age_year_fracs = trans_age_year_sums.astype(np.float)/trans_year_sums.reindex(trans_age_year_sums.index,level='year')
-
-#if __name__ == "__main__":
-#  # execution state
-#  if len(sys.argv) == 1:
-#    stage = 0
-#  else:
-#    stage = int(sys.argv[1])
-#
-#  main(stage)
-

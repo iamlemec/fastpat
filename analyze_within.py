@@ -34,6 +34,7 @@ if stage_min <= 0 and stage_max >= 0 and run0:
     firmyear_info = sqlio.read_frame('select * from firmyear_info',con)
     firm_info = sqlio.read_frame('select * from firm_life',con)
     grant_info = sqlio.read_frame('select * from grant_info',con)
+    trans_info = sqlio.read_frame('select * from assign_info',con)
     con.close()
 
     # make index
@@ -48,6 +49,10 @@ if stage_min <= 0 and stage_max >= 0 and run0:
     fy_all = pd.DataFrame(data={'firm_num': all_fnums, 'year': all_years})
     datf_idx = fy_all.merge(firmyear_info,how='left',on=['firm_num','year'])
     datf_idx.fillna(value={'file_pnum':0,'grant_pnum':0,'dest_pnum':0,'source_pnum':0,'dest_nbulk':0,'source_nbulk':0},inplace=True)
+
+    # compustat masks
+    datf_idx['has_comp'] = ~datf_idx['revenue'].isnull()
+    #datf_idx[datf_idx['has_comp']] = datf_idx[datf_idx['has_comp']].fillna({'rnd':0.0,'acquire':0.0})
 
     # derivative columns
     datf_idx = datf_idx.merge(firm_info,how='left',on='firm_num')
@@ -161,12 +166,13 @@ if stage_min <= 2 and stage_max >= 2 and run2:
     period_len = 5
     top_year = base_year + period_len
     type_int_cols = ['firm_num','year','naics2','naics3','mode_class','age']
-    type_float_cols = ['stock','mode_frac','high_tech']
+    type_float_cols = ['employ','revenue','income','stock','mktval','intan','assets','mode_frac','high_tech']
     type_bool_cols = ['stock_bin','age_bin','ht_bin']
-    sum_float_cols = ['assets','capx','cash','cogs','deprec','income','employ','intan','debt','revenue','sales','rnd','fcost','mktval',
+    sum_float_cols = ['assets','capx','cash','cogs','deprec','intan','debt','employ','income','revenue','sales','rnd','fcost','mktval','acquire',
                       'file_pnum','grant_pnum','source_pnum','dest_pnum','trans_pnum','expire_pnum','n_cited','n_self_cited','n_citing']
     type_cols = type_int_cols + type_float_cols + type_bool_cols
-    all_cols = type_cols + sum_float_cols
+    pure_type_cols = list(set(type_cols)-set(sum_float_cols))
+    all_cols = list(set(type_cols+sum_float_cols))
 
     # select our target data
     firm_panel = datf_idx[all_cols]
@@ -190,7 +196,7 @@ if stage_min <= 2 and stage_max >= 2 and run2:
     # firm characteristics at start of window
     firm_totals['start_year'] = firm_start['year']
     firm_totals['end_year'] = firm_end['year']
-    firm_totals = dt.stack_frames([firm_totals,firm_start[type_cols]])
+    firm_totals[pure_type_cols] = firm_start[pure_type_cols]
 
     # exit rates
     firm_totals['entered'] = firm_totals['start_year'] > base_year
@@ -206,9 +212,9 @@ if stage_min <= 2 and stage_max >= 2 and run2:
         firm_totals[col+'_abs'] = np.abs(firm_totals[col+'_lgrowth'])
 
     # general firm statistics
-    firm_totals['file_frac'] = dt.noinf(firm_totals['file_pnum']/firm_totals['stock'])
-    firm_totals['source_frac'] = dt.noinf(firm_totals['source_pnum']/firm_totals['stock'])
-    firm_totals['dest_frac'] = dt.noinf(firm_totals['dest_pnum']/firm_totals['stock'])
+    firm_totals['file_frac'] = dt.noinf(firm_totals['file_pnum']/firm_totals['stock_start'])
+    firm_totals['source_frac'] = dt.noinf(firm_totals['source_pnum']/firm_totals['stock_start'])
+    firm_totals['dest_frac'] = dt.noinf(firm_totals['dest_pnum']/firm_totals['stock_start'])
     firm_totals['dest_share'] = dt.noinf(firm_totals['dest_pnum']/(firm_totals['dest_pnum']+firm_totals['grant_pnum']))
     firm_totals['source_share'] = dt.noinf(firm_totals['source_pnum']/(firm_totals['source_pnum']+firm_totals['grant_pnum']))
     firm_totals['file_frac_bin'] = firm_totals['file_frac'] > firm_totals['file_frac'].median()
@@ -230,31 +236,36 @@ if stage_min <= 2 and stage_max >= 2 and run2:
     firm_totals['capital'] = firm_totals['assets'] - firm_totals['intan']
     firm_totals['invest_cap'] = dt.noinf(firm_totals['capx']/firm_totals['capital'])
     firm_totals['invest_rnd'] = dt.noinf(firm_totals['rnd']/firm_totals['intan'])
+    firm_totals['acquire_int'] = dt.noinf(np.log1p(firm_totals['acquire']/firm_totals['assets']))
+    firm_totals['pos_dest'] = firm_totals['dest_pnum'] > 0
+    firm_totals['pos_source'] = firm_totals['source_pnum'] > 0
+    firm_totals['pos_trans'] = firm_totals['trans_pnum'] > 0
+    firm_totals['pos_acquire'] = firm_totals['acquire'] > 0.0
 
-    # overall stats
-    total_means = firm_totals.mean()
-    total_medians = firm_totals.median()
+    # # overall stats
+    # total_means = firm_totals.mean()
+    # total_medians = firm_totals.median()
 
-    # aggregation by various classifications
-    sbin_groups = firm_totals.groupby('stock_bin')
-    sbin_means = sbin_groups.mean()
-    sbin_medians = sbin_groups.median()
-    sbin_counts = sbin_groups.size()
+    # # aggregation by various classifications
+    # sbin_groups = firm_totals.groupby('stock_bin')
+    # sbin_means = sbin_groups.mean()
+    # sbin_medians = sbin_groups.median()
+    # sbin_counts = sbin_groups.size()
 
-    abin_groups = firm_totals.groupby('age_bin')
-    abin_means = abin_groups.mean()
-    abin_medians = abin_groups.median()
-    abin_counts = abin_groups.size()
+    # abin_groups = firm_totals.groupby('age_bin')
+    # abin_means = abin_groups.mean()
+    # abin_medians = abin_groups.median()
+    # abin_counts = abin_groups.size()
 
-    tbin_groups = firm_totals.groupby('ht_bin')
-    tbin_means = tbin_groups.mean()
-    tbin_medians = tbin_groups.median()
-    tbin_counts = tbin_groups.size()
+    # tbin_groups = firm_totals.groupby('ht_bin')
+    # tbin_means = tbin_groups.mean()
+    # tbin_medians = tbin_groups.median()
+    # tbin_counts = tbin_groups.size()
 
-    ibin_groups = firm_totals.groupby('file_frac_bin')
-    ibin_means = ibin_groups.mean()
-    ibin_medians = ibin_groups.median()
-    ibin_counts = ibin_groups.size()
+    # ibin_groups = firm_totals.groupby('file_frac_bin')
+    # ibin_means = ibin_groups.mean()
+    # ibin_medians = ibin_groups.median()
+    # ibin_counts = ibin_groups.size()
 
 if stage_min <= 3 and stage_max >= 3 and run3:
     # modal classone group stats
@@ -265,13 +276,15 @@ if stage_min <= 3 and stage_max >= 3 and run3:
     class_stds = class_groups.std()
     class_skews = class_groups.skew()
     class_cvars = dt.noinf(class_stds/class_means)
-    class_sfracs = dt.noinf(class_sums.apply(lambda df: df/class_sums['stock']))
+    class_sfracs = dt.noinf(class_sums.apply(lambda df: df/class_sums['stock_start']))
     class_ffracs = dt.noinf(class_sums.apply(lambda df: df/class_sums['file_pnum']))
+    class_lmeans = class_groups.apply(lambda df: np.log1p(df.astype(np.float)).mean())
+    class_lstds = class_groups.apply(lambda df: np.log1p(df.astype(np.float)).std())
     class_counts = class_groups.size()
 
     # aggregate into mecha-df
-    firm_class_info = dt.stack_frames([class_sums,class_means,class_medians,class_stds,class_skews,class_cvars,class_sfracs,class_ffracs],postfixes=['_sum','_mean','_median','_std','_skew','_cvar','_sfrac','_ffrac'])
-    firm_class_info['stock_skew'] = class_groups['stock'].apply(lambda s: np.log1p(s).std())
+    firm_class_info = dt.stack_frames([class_sums,class_means,class_medians,class_stds,class_skews,class_cvars,class_sfracs,class_ffracs,class_lmeans,class_lstds],postfixes=['_sum','_mean','_median','_std','_skew','_cvar','_sfrac','_ffrac','_lmean','_lstd'])
+    firm_class_info['stock_skew'] = class_groups['stock_start'].apply(lambda s: np.log1p(s).std())
     firm_class_info['self_cited_frac'] = dt.noinf(class_sums['n_self_cited']/class_sums['n_cited'])
     firm_class_info['cites_per_patent'] = dt.noinf(class_sums['n_cited']/class_sums['file_pnum'])
     firm_class_info['agg_profit'] = dt.noinf(class_sums['income']/class_sums['revenue'])
@@ -280,6 +293,8 @@ if stage_min <= 3 and stage_max >= 3 and run3:
     firm_class_info['agg_rndi'] = dt.noinf(class_sums['rnd']/class_sums['revenue'])
     firm_class_info['agg_invest'] = dt.noinf(class_sums['capx']/class_sums['capital'])
     firm_class_info['agg_rndprod'] = dt.noinf(class_sums['file_pnum']/class_sums['rnd'])
+    firm_class_info['agg_acquire_int'] = dt.noinf(class_sums['acquire']/class_sums['assets'])
+    firm_class_info['agg_dest_ffrac'] = dt.noinf(class_sums['dest_pnum']/class_sums['file_pnum'])
     firm_class_info['class_size'] = class_counts
 
     # pure patent stats

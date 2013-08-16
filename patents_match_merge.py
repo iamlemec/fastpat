@@ -101,10 +101,10 @@ if stage <= 2:
   cur.execute('drop table if exists compustat_match')
   cur.execute("""create table compustat_match (firm_num int, year int, gvkey int, assets real, capx real,
                  cash real, cogs real, deprec real, income real, employ real, intan real, debt real,
-                 revenue real, sales real, rnd real, fcost real, mktval real, naics int, sic int)""")
+                 revenue real, sales real, rnd real, fcost real, mktval real, acquire real, naics int, sic int)""")
   cur.execute("""insert into compustat_match select firmyear_match.firm_num,firmyear_match.year,firmyear.gvkey,
   sum(assets),sum(capx),sum(cash),sum(cogs),sum(deprec),sum(income),sum(employ),sum(intan),sum(debt),
-  sum(revenue),sum(sales),sum(rnd),sum(fcost),sum(mktval),naics,sic
+  sum(revenue),sum(sales),sum(rnd),sum(fcost),sum(mktval),sum(acquire),naics,sic
   from firmyear_match left outer join compdb.firmyear
   on (firmyear_match.gvkey = firmyear.gvkey and firmyear_match.year = firmyear.year)
   group by firmyear_match.firm_num,firmyear_match.year""")
@@ -117,10 +117,10 @@ if stage <= 3:
   cur.execute("""create table firmyear_info (firm_num int, year int, source_nbulk int, source_pnum int, dest_nbulk int, dest_pnum int,
   file_pnum int, grant_pnum int, expire_pnum int, n_cited int, n_self_cited int, n_citing int,
   assets real, capx real, cash real, cogs real, deprec real, income real, employ real, intan real,
-  debt real, revenue real, sales real, rnd real, fcost real, mktval real, naics int, sic int)""")
+  debt real, revenue real, sales real, rnd real, fcost real, mktval real, acquire real, naics int, sic int)""")
   cur.execute("""insert into firmyear_info select firmyear_all.firm_num,firmyear_all.year,
   source_tot.nbulk,source_tot.pnum,dest_tot.nbulk,dest_tot.pnum,file_tot.pnum,grant_tot.pnum,expire_tot.pnum,n_cited,n_self_cited,n_citing,
-  assets,capx,cash,cogs,deprec,income,employ,intan,debt,revenue,sales,rnd,fcost,mktval,naics,sic from firmyear_all
+  assets,capx,cash,cogs,deprec,income,employ,intan,debt,revenue,sales,rnd,fcost,mktval,acquire,naics,sic from firmyear_all
   left outer join source_tot       on (firmyear_all.firm_num = source_tot.firm_num      and firmyear_all.year = source_tot.year)
   left outer join dest_tot         on (firmyear_all.firm_num = dest_tot.firm_num        and firmyear_all.year = dest_tot.year)
   left outer join file_tot         on (firmyear_all.firm_num = file_tot.firm_num        and firmyear_all.year = file_tot.year)
