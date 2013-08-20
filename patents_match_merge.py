@@ -1,5 +1,9 @@
 import sys
+import itertools
 import sqlite3
+import numpy as np
+import pandas as pd
+import pandas.io.sql as sqlio
 
 # execution state
 if len(sys.argv) == 1:
@@ -178,6 +182,38 @@ if stage <= 4:
 
   cur.execute('drop table firm_hightech')
   cur.execute('drop table firm_class_mode')
+
+if stage <= 5:
+    # construct patent stocks
+    print 'Constructing patent stocks'
+
+    # load firm data
+    firmyear_info = sqlio.read_frame('select * from firmyear_info',con)
+    firm_info = sqlio.read_frame('select * from firm_life',con)
+
+    # make (firm_num,year) index
+    fnum_set = firm_info['firm_num']
+    year_min = firm_info['year_min']
+    year_max = firm_info['year_max']
+    life_span = firm_info['life_span']
+    all_fnums = np.array(list(itertools.chain.from_iterable([[fnum]*life for (fnum,life) in zip(fnum_set,life_span)])),dtype=np.int)
+    all_years = np.array(list(itertools.chain.from_iterable([xrange(x,y+1) for (x,y) in zip(year_min,year_max)])),dtype=np.int)
+    fy_all = pd.DataFrame(data={'firm_num': all_fnums, 'year': all_years})
+    datf_idx = fy_all.merge(firmyear_info,how='left',on=['firm_num','year'])
+    datf_idx.fillna(value={'file_pnum':0,'grant_pnum':0,'dest_pnum':0,'source_pnum':0,'dest_nbulk':0,'source_nbulk':0},inplace=True)
+
+    # merge in overall firm info
+    datf_idx = datf_idx.merge(firm_info,how='left',on='firm_num')
+    datf_idx['age'] = datf_idx['year']-datf_idx['year_min']
+
+    # aggregate stocks
+    datf_idx['patnet'] = datf_idx['file_pnum'] - datf_idx['expire_pnum']
+    firm_groups = datf_idx.groupby('firm_num')
+    datf_idx['stock'] = firm_groups['patnet'].cumsum() - datf_idx['patnet']
+    datf_idx = datf_idx[datf_idx['stock']>0]
+
+    # write new frame to disk
+    sqlio.write_frame(datf_idx,'firmyear_index',con,if_exists='replace')
 
 # clean up
 con.commit()

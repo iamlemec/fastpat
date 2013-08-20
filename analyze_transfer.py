@@ -1,8 +1,12 @@
+import sys
+import itertools
 import numpy as np
 import sqlite3
 import pandas as pd
-import sys
-import itertools
+import pandas.io.sql as sqlio
+
+# options
+run_flags = [True,True,True]
 
 # execution state
 if len(sys.argv) == 1:
@@ -15,66 +19,32 @@ else:
   stage_min = int(sys.argv[1])
   stage_max = int(sys.argv[2])
 
-run0 = True
-run1 = True
-run2 = True
+for i in range(len(run_flags)): run_flags[i] &= (stage_min <= i) & (stage_max >= i)
 
-if stage_min <= 0 and stage_max >= 0 and run0:
+if run_flags[0]:
     # load data
     print 'Loading data'
 
     # load firm data
-    # firm_life starts a firm when they file for their first patent and ends after their last file
-    conn = sqlite3.connect('store/within.db')
-    cur = conn.cursor()
-    datf = pd.DataFrame(cur.execute('select firm_num,year,source_nbulk,source_pnum,dest_nbulk,dest_pnum,file_pnum,income,revenue,rnd,naics from firmyear_info where year>=1950').fetchall(),columns=['fnum','year','source_bulk','source','dest_bulk','dest','file','income','revenue','rnd','naics'])
-    firm_info = pd.DataFrame(data=cur.execute('select firm_num,year_min,year_max,life_span,high_tech from firm_life').fetchall(),columns=['fnum','zero_year','max_year','life_span','high_tech'])
-    datf_trans = pd.DataFrame(cur.execute('select patnum,execyear,source_fn,dest_fn,grantyear,fileyear from assign_info where execyear>=1950').fetchall(),columns=['patnum','year','source_fn','dest_fn','grantyear','fileyear'],dtype=np.int)
-    conn.close()
+    con = sqlite3.connect('store/within.db')
+    con_cites = sqlite3.connect('store/citations.db')
+    datf_idx = sqlio.read_frame('select * from firmyear_index',con)
+    firm_info = sqlio.read_frame('select * from firm_life',con)
+    trans_info = sqlio.read_frame('select * from assign_info',con)
+    firm_cite_year = sqlio.read_frame('select * from firm_cite_year',con_cites)
+    con.close()
+    con_cites.close()
 
-    # extra stats
-    datf_trans['patage'] = datf_trans['year'] - datf_trans['fileyear']
-    datf_trans['patage_grant'] = datf_trans['year'] - datf_trans['grantyear']
-
-    # make index
-    print 'Reindexing'
-
-    fnum_set = firm_info['fnum']
-    zero_year = firm_info['zero_year']
-    max_year = firm_info['max_year']+1
-    life_span = firm_info['life_span']+1
-    all_fnums = np.array(list(itertools.chain.from_iterable([[fnum]*life for (fnum,life) in zip(fnum_set,life_span)])),dtype=np.int)
-    all_years = np.array(list(itertools.chain.from_iterable([xrange(x,y+1) for (x,y) in zip(zero_year,max_year)])),dtype=np.int)
-    fy_all = pd.DataFrame(data={'fnum': all_fnums, 'year': all_years})
-    datf_idx = fy_all.merge(datf,how='left',on=['fnum','year']).fillna(value={'file':0,'dest':0,'source':0,'source_bulk':0,'dest_bulk':0},inplace=True)
-
-    # patent expiry (file + 20)
-    datf_idx['year_20p'] = datf_idx['year'] + 20
-    datf_idx = datf_idx.merge(datf_idx[['fnum','year_20p','file','dest']],how='left',left_on=['fnum','year'],right_on=['fnum','year_20p'],suffixes=('','_expire'))
-    datf_idx = datf_idx.drop(['year_20p','year_20p_expire'],axis=1)
-    datf_idx = datf_idx.fillna({'file_expire':0,'dest_expire':0})
-
-    # derivative columns
-    datf_idx = datf_idx.merge(firm_info.filter(['fnum','zero_year','max_year','life_span','has_comp','has_revn','has_rnd','has_pats','pats_tot','high_tech']),how='left',on='fnum')
-    datf_idx['age'] = datf_idx['year']-datf_idx['zero_year']
-    datf_idx['trans'] = datf_idx['source']+datf_idx['dest']
-    datf_idx['ht_bin'] = datf_idx['high_tech'] > 0.5
-
-    #### select only high tech firms ####
-    #datf_trans = datf_trans[datf_trans['ht_bin']]
-
-if stage_min <= 1 and stage_max >= 1 and run1:
-    # construct patent stocks
-    print 'Constructing patent stocks'
-
-    datf_idx['patnet'] = datf_idx['file'] + datf_idx['dest'] - datf_idx['source'] - datf_idx['file_expire'] - datf_idx['dest_expire']
-    firm_groups = datf_idx.groupby('fnum')
-    datf_idx['stock'] = firm_groups['patnet'].cumsum() - datf_idx['patnet']
-    #datf_idx = datf_idx[datf_idx['stock']>0]
-
-if stage_min <= 2 and stage_max >= 2 and run2:
+if run_flags[1]:
     # calculate transfer statistics
     print 'Calculating transfer statistics'
+
+    # extra stats
+    trans_info['patage'] = trans_info['execyear'] - trans_info['fileyear']
+    trans_info['patage_grant'] = trans_info['execyear'] - trans_info['grantyear']
+
+    datf_idx['trans'] = datf_idx['source_pnum']+datf_idx['dest_pnum']
+    datf_idx['ht_bin'] = datf_idx['high_tech'] > 0.5
 
     # group by year
     all_year_groups = datf_idx.groupby('year')
@@ -96,38 +66,58 @@ if stage_min <= 2 and stage_max >= 2 and run2:
 
     # merge in transfers
     trans_cols = ['size_bin','age_bin','stock_rank','age_rank','stock','age']
-    datf_idx_sub = datf_idx.filter(['fnum','year']+trans_cols)
-    datf_trans_merge = pd.merge(datf_trans,datf_idx_sub,how='left',left_on=['dest_fn','year'],right_on=['fnum','year'])
-    datf_trans_merge = datf_trans_merge.rename(columns=dict([(s,s+'_dest') for s in ['fnum']+trans_cols]))
-    datf_trans_merge = pd.merge(datf_trans_merge,datf_idx_sub,how='left',left_on=['source_fn','year'],right_on=['fnum','year'])
-    datf_trans_merge = datf_trans_merge.rename(columns=dict([(s,s+'_source') for s in ['fnum']+trans_cols]))
+    datf_idx_sub = datf_idx[['firm_num','year']+trans_cols]
+    trans_merge = pd.merge(trans_info,datf_idx_sub,how='left',left_on=['dest_fn','execyear'],right_on=['firm_num','year'])
+    trans_merge = trans_merge.rename(columns=dict([(s,s+'_dest') for s in ['firm_num']+trans_cols]))
+    trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['source_fn','execyear'],right_on=['firm_num','year'])
+    trans_merge = trans_merge.rename(columns=dict([(s,s+'_source') for s in ['firm_num']+trans_cols]))
 
     # three groups - no_match(0),match_small(1),match_large(2)
-    datf_trans_merge['size_bin_source'] += 1
-    datf_trans_merge['size_bin_dest'] += 1
-    datf_trans_merge['age_bin_source'] += 1
-    datf_trans_merge['age_bin_dest'] += 1
-    datf_trans_merge.fillna({'size_bin_source':0,'size_bin_dest':0,'age_bin_source':0,'age_bin_dest':0},inplace=True)
+    trans_merge['size_bin_source'] += 1
+    trans_merge['size_bin_dest'] += 1
+    trans_merge['age_bin_source'] += 1
+    trans_merge['age_bin_dest'] += 1
+    trans_merge.fillna({'size_bin_source':0,'size_bin_dest':0,'age_bin_source':0,'age_bin_dest':0},inplace=True)
 
-    trans_size_up = (datf_trans_merge['stock_dest'] > datf_trans_merge['stock_source']).astype(np.float)
-    trans_size_up[datf_trans_merge['stock_dest'].isnull()|datf_trans_merge['stock_source'].isnull()] = np.nan
-    trans_age_up = (datf_trans_merge['age_dest'] > datf_trans_merge['age_source']).astype(np.float)
-    trans_age_up[datf_trans_merge['age_dest'].isnull()|datf_trans_merge['age_source'].isnull()] = np.nan
-    datf_trans_merge['trans_size_up'] = trans_size_up
-    datf_trans_merge['trans_age_up'] = trans_age_up
+    trans_size_up = (trans_merge['stock_dest'] > trans_merge['stock_source']).astype(np.float)
+    trans_size_up[trans_merge['stock_dest'].isnull()|trans_merge['stock_source'].isnull()] = np.nan
+    trans_age_up = (trans_merge['age_dest'] > trans_merge['age_source']).astype(np.float)
+    trans_age_up[trans_merge['age_dest'].isnull()|trans_merge['age_source'].isnull()] = np.nan
+    trans_merge['trans_size_up'] = trans_size_up
+    trans_merge['trans_age_up'] = trans_age_up
 
     # group by year
-    trans_year_groups = datf_trans_merge.groupby('year')
+    trans_year_groups = trans_merge.groupby('execyear')
     trans_year_sums = trans_year_groups.size()
     trans_year_size_up = trans_year_groups['trans_size_up'].mean()
     trans_year_age_up = trans_year_groups['trans_age_up'].mean()
 
     # group by size transition type
-    trans_size_year_groups = datf_trans_merge.groupby(('size_bin_source','size_bin_dest','year'))
+    trans_size_year_groups = trans_merge.groupby(('size_bin_source','size_bin_dest','execyear'))
     trans_size_year_sums = trans_size_year_groups.size()
-    trans_size_year_fracs = trans_size_year_sums.astype(np.float)/trans_year_sums.reindex(trans_size_year_sums.index,level='year')
+    trans_size_year_fracs = trans_size_year_sums.astype(np.float)/trans_year_sums.reindex(trans_size_year_sums.index,level='execyear')
 
     # group by age transition type
-    trans_age_year_groups = datf_trans_merge.groupby(('age_bin_source','age_bin_dest','year'))
+    trans_age_year_groups = trans_merge.groupby(('age_bin_source','age_bin_dest','execyear'))
     trans_age_year_sums = trans_age_year_groups.size()
-    trans_age_year_fracs = trans_age_year_sums.astype(np.float)/trans_year_sums.reindex(trans_age_year_sums.index,level='year')
+    trans_age_year_fracs = trans_age_year_sums.astype(np.float)/trans_year_sums.reindex(trans_age_year_sums.index,level='execyear')
+
+if run_flags[2]:
+    base_year = 1995
+    period_len = 5
+    top_year = base_year + period_len
+
+    # panel of all firms in year range
+    firm_info_panel = firm_info[(firm_info['year_max']>=base_year)&(firm_info['year_min']<top_year)]
+
+    # panel of all citing firm pairs in year range
+    firm_cite_panel = firm_cite_year[(firm_cite_year['cite_year']>=base_year)&(firm_cite_year['cite_year']<top_year)]
+    firm_cite_merge = firm_cite_panel.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citer_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citer_mode_class'})
+    firm_cite_merge = firm_cite_merge.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citee_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citee_mode_class'})
+    firm_cite_within = firm_cite_merge[firm_cite_merge['citer_mode_class']==firm_cite_merge['citee_mode_class']].drop('citee_mode_class',axis=1).rename(columns={'citer_mode_class':'mode_class'})
+
+    # citation rates
+    firm_panel_class_count = firm_info_panel.groupby('mode_class').size()
+    within_cite_class_count = firm_cite_within.groupby('mode_class').size()
+    cite_pair_class_frac = within_cite_class_count.astype(np.float)/(firm_panel_class_count**2)
+    cite_pair_class_agg = within_cite_class_count.sum().astype(np.float)/(firm_panel_class_count**2).sum()

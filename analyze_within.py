@@ -7,6 +7,8 @@ import scipy.stats as stats
 import data_tools as dt
 import pandas.io.sql as sqlio
 
+run_flags = [True,True,True,True,True]
+
 # execution state
 if len(sys.argv) == 1:
   stage_min = 0
@@ -18,72 +20,34 @@ else:
   stage_min = int(sys.argv[1])
   stage_max = int(sys.argv[2])
 
-run0 = True
-run1 = True
-run2 = True
-run3 = True
+for i in range(len(run_flags)): run_flags[i] &= (stage_min <= i) & (stage_max >= i)
 
-# load in data from db
-if stage_min <= 0 and stage_max >= 0 and run0:
-    # load data
+# firm panel years
+base_year = 1995
+period_len = 5
+top_year = base_year + period_len
+
+if run_flags[0]:
     print 'Loading data'
 
     # load firm data
     # firm_life starts a firm when they file for their first patent and ends when they file for their last
-    con = sqlite3.connect('store/within.db')
-    firmyear_info = sqlio.read_frame('select * from firmyear_info',con)
-    firm_info = sqlio.read_frame('select * from firm_life',con)
-    grant_info = sqlio.read_frame('select * from grant_info',con)
-    trans_info = sqlio.read_frame('select * from assign_info',con)
-    con.close()
+    con_within = sqlite3.connect('store/within.db')
+    datf_idx = sqlio.read_frame('select * from firmyear_index',con_within)
+    firm_info = sqlio.read_frame('select * from firm_life',con_within)
+    grant_info = sqlio.read_frame('select * from grant_info',con_within)
+    trans_info = sqlio.read_frame('select * from assign_info',con_within)
+    con_within.close()
 
-    # make index
-    print 'Reindexing'
+    # load citation data
+    con_cites = sqlite3.connect('store/citations.db')
+    firm_cite_year = sqlio.read_frame('select * from firm_cite_year',con_cites)
+    con_cites.close()
 
-    fnum_set = firm_info['firm_num']
-    year_min = firm_info['year_min']
-    year_max = firm_info['year_max']
-    life_span = firm_info['life_span']
-    all_fnums = np.array(list(itertools.chain.from_iterable([[fnum]*life for (fnum,life) in zip(fnum_set,life_span)])),dtype=np.int)
-    all_years = np.array(list(itertools.chain.from_iterable([xrange(x,y+1) for (x,y) in zip(year_min,year_max)])),dtype=np.int)
-    fy_all = pd.DataFrame(data={'firm_num': all_fnums, 'year': all_years})
-    datf_idx = fy_all.merge(firmyear_info,how='left',on=['firm_num','year'])
-    datf_idx.fillna(value={'file_pnum':0,'grant_pnum':0,'dest_pnum':0,'source_pnum':0,'dest_nbulk':0,'source_nbulk':0},inplace=True)
-
-    # compustat masks
-    datf_idx['has_comp'] = ~datf_idx['revenue'].isnull()
-    #datf_idx[datf_idx['has_comp']] = datf_idx[datf_idx['has_comp']].fillna({'rnd':0.0,'acquire':0.0})
-
-    # derivative columns
-    datf_idx = datf_idx.merge(firm_info,how='left',on='firm_num')
-    datf_idx['age'] = datf_idx['year']-datf_idx['year_min']
+    # basic stats
     datf_idx['naics'] = datf_idx['naics'].fillna(0).astype(np.int)
     datf_idx['naics3'] = datf_idx['naics']/1000 # surprisingly, this works as desired
     datf_idx['naics2'] = datf_idx['naics3']/10
-
-    # top level patent class info
-    print 'Toplevel industry grant info'
-
-    grant_class_groups = grant_info.groupby('classone')
-    grant_class_born = grant_class_groups['fileyear'].quantile(0.01)
-    grant_class_base = pd.DataFrame({'class_born':grant_class_born})
-    grant_class_base['class_age'] = 2013 - grant_class_base['class_born']
-
-    # construct patent stocks
-    print 'Constructing patent stocks'
-
-    datf_idx['patnet'] = datf_idx['file_pnum'] - datf_idx['expire_pnum']
-    firm_groups = datf_idx.groupby('firm_num')
-    datf_idx['stock'] = firm_groups['patnet'].cumsum() - datf_idx['patnet']
-    datf_idx['file_cum'] = firm_groups['file_pnum'].cumsum() - datf_idx['file_pnum']
-    datf_idx = datf_idx[datf_idx['stock']>0]
-    datf_idx['patneti'] = datf_idx['patnet']/datf_idx['stock']
-
-if stage_min <= 1 and stage_max >= 1 and run1:
-    # patent fractions
-    print 'Firm statistics'
-
-    # basic stats
     datf_idx['trans_pnum'] = datf_idx['source_pnum']+datf_idx['dest_pnum']
     datf_idx['trans_net'] = datf_idx['dest_pnum']-datf_idx['source_pnum']
     datf_idx['ht_bin'] = datf_idx['high_tech'] > 0.9
@@ -106,14 +70,13 @@ if stage_min <= 1 and stage_max >= 1 and run1:
     qcut_size = 0.8
     median_stock_vec = all_year_groups['stock'].quantile(qcut_size)
     median_stock = median_stock_vec[datf_idx['year']]
-    datf_idx['stock_bin'] = datf_idx['stock'] > median_stock
+    datf_idx['size_bin'] = datf_idx['stock'] > median_stock
 
     mean_stock_vec = all_year_groups['stock'].mean()
     mean_stock = mean_stock_vec[datf_idx['year']].values
-    datf_idx['stock_year_norm'] = datf_idx['stock']/mean_stock
+    datf_idx['size_year_norm'] = datf_idx['stock']/mean_stock
 
     # group by age-year
-
     #qcut_age = 0.5
     #median_age_vec = all_year_groups['age'].quantile(qcut_age)
     #median_age = median_age_vec[datf_idx['year']]
@@ -127,47 +90,18 @@ if stage_min <= 1 and stage_max >= 1 and run1:
     mean_age = mean_age_vec[datf_idx['year']].values
     datf_idx['age_year_norm'] = datf_idx['age']/mean_age
 
-    # start aggregating
-    #### select only large-ish firms ####
-    #datf_idx = datf_idx[datf_idx['stock']>=10]
-    datf_stats = datf_idx[(datf_idx['year']>=1994)&(datf_idx['year']<=2006)] # default
+    # normalize stock/age into yearly ranks
+    rankify = lambda s: np.argsort(s).astype(np.float)/(len(s)-1)
+    datf_idx['size_rank'] = all_year_groups['stock'].apply(rankify)
+    datf_idx['age_rank'] = all_year_groups['age'].apply(rankify)
 
-    size_year_groups = datf_stats.groupby(('stock_bin','year'))
-    size_groups = datf_stats.groupby(('stock_bin'))
-
-    age_year_groups = datf_stats.groupby(('age_bin','year'))
-    age_groups = datf_stats.groupby(('age_bin'))
-
-    year_sums = all_year_groups.sum()
-    year_means = all_year_groups.mean()
-
-    size_year_sums = size_year_groups.sum()
-    size_year_means = size_year_groups.mean()
-    size_year_medians = size_year_groups.median()
-    size_year_fracs = size_year_sums/year_sums.reindex(size_year_sums.index,level='year')
-    means_by_size = size_year_means.unstack(0)
-    sums_by_size = size_year_sums.unstack(0)
-    fracs_by_size = size_year_fracs.unstack(0)
-
-    age_year_sums = age_year_groups.sum()
-    age_year_means = age_year_groups.mean()
-    age_year_medians = age_year_groups.median()
-    age_year_fracs = age_year_sums/year_sums.reindex(age_year_sums.index,level='year')
-    means_by_age = age_year_means.unstack(0)
-    sums_by_age = age_year_sums.unstack(0)
-    fracs_by_age = age_year_fracs.unstack(0)
-
-if stage_min <= 2 and stage_max >= 2 and run2:
-    # firm level analysis
+if run_flags[1]:
     print 'Firm/industry level analysis'
 
-    # period 1
-    base_year = 1995
-    period_len = 5
-    top_year = base_year + period_len
+    # data selection parameters
     type_int_cols = ['firm_num','year','naics2','naics3','mode_class','age']
     type_float_cols = ['employ','revenue','income','stock','mktval','intan','assets','mode_frac','high_tech']
-    type_bool_cols = ['stock_bin','age_bin','ht_bin']
+    type_bool_cols = ['size_bin','age_bin','ht_bin']
     sum_float_cols = ['assets','capx','cash','cogs','deprec','intan','debt','employ','income','revenue','sales','rnd','fcost','mktval','acquire',
                       'file_pnum','grant_pnum','source_pnum','dest_pnum','trans_pnum','expire_pnum','n_cited','n_self_cited','n_citing']
     type_cols = type_int_cols + type_float_cols + type_bool_cols
@@ -194,6 +128,7 @@ if stage_min <= 2 and stage_max >= 2 and run2:
     firm_end[type_bool_cols] = firm_end[type_bool_cols].astype(np.bool)
 
     # firm characteristics at start of window
+    firm_totals['count'] = 1
     firm_totals['start_year'] = firm_start['year']
     firm_totals['end_year'] = firm_end['year']
     firm_totals[pure_type_cols] = firm_start[pure_type_cols]
@@ -205,6 +140,7 @@ if stage_min <= 2 and stage_max >= 2 and run2:
     # growth rates
     for col in ['employ','revenue','income','stock','mktval','intan','assets']:
         firm_totals[col+'_start'] = firm_start[col]
+        firm_totals[col+'_start'][firm_totals['entered']] = np.nan # entrants have no start state
         firm_totals[col+'_end'] = firm_end[col]
         firm_totals[col+'_change'] = firm_end[col] - firm_start[col]
         firm_totals[col+'_lgrowth'] = dt.noinf(np.log(firm_totals[col+'_end']/firm_totals[col+'_start'])/(firm_totals['obs_years']-1))
@@ -242,32 +178,94 @@ if stage_min <= 2 and stage_max >= 2 and run2:
     firm_totals['pos_trans'] = firm_totals['trans_pnum'] > 0
     firm_totals['pos_acquire'] = firm_totals['acquire'] > 0.0
 
-    # # overall stats
-    # total_means = firm_totals.mean()
-    # total_medians = firm_totals.median()
+if run_flags[2]:
+    print 'Firm type breakdowns'
 
-    # # aggregation by various classifications
-    # sbin_groups = firm_totals.groupby('stock_bin')
-    # sbin_means = sbin_groups.mean()
-    # sbin_medians = sbin_groups.median()
-    # sbin_counts = sbin_groups.size()
+    firm_incumbents = firm_totals[~firm_totals['entered']]
 
-    # abin_groups = firm_totals.groupby('age_bin')
-    # abin_means = abin_groups.mean()
-    # abin_medians = abin_groups.median()
-    # abin_counts = abin_groups.size()
+    firm_size_groups = firm_incumbents.groupby(('size_bin'))
+    firm_age_groups = firm_incumbents.groupby(('age_bin'))
 
-    # tbin_groups = firm_totals.groupby('ht_bin')
-    # tbin_means = tbin_groups.mean()
-    # tbin_medians = tbin_groups.median()
-    # tbin_counts = tbin_groups.size()
+    firm_all_sums = firm_incumbents.sum()
 
-    # ibin_groups = firm_totals.groupby('file_frac_bin')
-    # ibin_means = ibin_groups.mean()
-    # ibin_medians = ibin_groups.median()
-    # ibin_counts = ibin_groups.size()
+    firm_size_sums = firm_size_groups.sum()
+    firm_size_means = firm_size_groups.mean()
+    firm_size_medians = firm_size_groups.median()
+    firm_size_fracs = firm_size_sums/firm_all_sums
+    firm_means_by_size = firm_size_means.unstack(0)
+    firm_sums_by_size = firm_size_sums.unstack(0)
+    firm_fracs_by_size = firm_size_fracs.unstack(0)
 
-if stage_min <= 3 and stage_max >= 3 and run3:
+    firm_age_sums = firm_age_groups.sum()
+    firm_age_means = firm_age_groups.mean()
+    firm_age_medians = firm_age_groups.median()
+    firm_age_fracs = firm_age_sums/firm_all_sums
+    firm_means_by_age = firm_age_means.unstack(0)
+    firm_sums_by_age = firm_age_sums.unstack(0)
+    firm_fracs_by_age = firm_age_fracs.unstack(0)
+
+    # cumulative fractions sorted by initial stock, excludes entrants obvi
+    firm_size_cumsum = firm_incumbents[['count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort(columns='stock_start').cumsum().apply(lambda s: s.astype(np.float)/s.irow(-1))
+    firm_size_cumsum = firm_size_cumsum.set_index(np.linspace(0.0,1.0,len(firm_cumsum)))
+    firm_age_cumsum = firm_incumbents[['age','count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort(columns='age').drop('age',axis=1).cumsum().apply(lambda s: s.astype(np.float)/s.irow(-1))
+    firm_age_cumsum = firm_age_cumsum.set_index(np.linspace(0.0,1.0,len(firm_cumsum)))
+
+if run_flags[3]:
+    print 'Transfer size/age stats'
+
+    # merge in transfers
+    trans_cols = ['size_bin','age_bin','size_rank','age_rank','stock','age']
+    datf_idx_sub = datf_idx[['firm_num','year']+trans_cols]
+    trans_merge = pd.merge(trans_info,datf_idx_sub,how='left',left_on=['dest_fn','execyear'],right_on=['firm_num','year'])
+    trans_merge = trans_merge.rename(columns=dict([(s,s+'_dest') for s in ['firm_num']+trans_cols]))
+    trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['source_fn','execyear'],right_on=['firm_num','year'])
+    trans_merge = trans_merge.rename(columns=dict([(s,s+'_source') for s in ['firm_num']+trans_cols]))
+
+    # three groups - no_match(0),match_small(1),match_large(2)
+    trans_merge['size_bin_source'] += 1
+    trans_merge['size_bin_dest'] += 1
+    trans_merge['age_bin_source'] += 1
+    trans_merge['age_bin_dest'] += 1
+    trans_merge.fillna({'size_bin_source':0,'size_bin_dest':0,'age_bin_source':0,'age_bin_dest':0},inplace=True)
+
+    trans_merge['size_up'] = (trans_merge['stock_dest'] > trans_merge['stock_source']).astype(np.float)
+    trans_merge['size_up'][trans_merge['stock_dest'].isnull()|trans_merge['stock_source'].isnull()] = np.nan
+    trans_merge['age_up'] = (trans_merge['age_dest'] > trans_merge['age_source']).astype(np.float)
+    trans_merge['age_up'][trans_merge['age_dest'].isnull()|trans_merge['age_source'].isnull()] = np.nan
+
+    trans_merge['size_rank_diff'] = trans_merge['size_rank_dest'] - trans_merge['size_rank_source']
+    trans_merge['age_rank_diff'] = trans_merge['age_rank_dest'] - trans_merge['age_rank_source']
+
+    # select data years
+    trans_stats = trans_merge[(trans_merge['execyear']>=base_year)&(trans_merge['execyear']<top_year)]
+
+    # group by patent class
+    trans_class_groups = trans_stats.groupby('classone')
+    trans_class_means = trans_class_groups.mean().rename(columns=dt.prefixer('trans_')).rename(columns=dt.postfixer('_mean'))
+
+    # panel of all firms in year range
+    firm_info_panel = firm_info[(firm_info['year_max']>=base_year)&(firm_info['year_min']<top_year)]
+
+    # panel of all citing firm pairs in year range
+    firm_cite_panel = firm_cite_year[(firm_cite_year['cite_year']>=base_year)&(firm_cite_year['cite_year']<top_year)]
+    firm_cite_merge = firm_cite_panel.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citer_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citer_mode_class'})
+    firm_cite_merge = firm_cite_merge.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citee_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citee_mode_class'})
+    firm_cite_within = firm_cite_merge[firm_cite_merge['citer_mode_class']==firm_cite_merge['citee_mode_class']].drop('citee_mode_class',axis=1).rename(columns={'citer_mode_class':'mode_class'})
+
+    # citation rates
+    firm_panel_class_count = firm_info_panel.groupby('mode_class').size()
+    within_cite_class_count = firm_cite_within.groupby('mode_class').size()
+    cite_pair_class_frac = within_cite_class_count.astype(np.float)/(firm_panel_class_count**2)
+    cite_pair_class_agg = within_cite_class_count.sum().astype(np.float)/(firm_panel_class_count**2).sum()
+
+if run_flags[4]:
+    print 'Toplevel industry info'
+
+    grant_class_groups = grant_info.groupby('classone')
+    grant_class_born = grant_class_groups['fileyear'].quantile(0.01)
+    grant_class_base = pd.DataFrame({'class_born':grant_class_born})
+    grant_class_base['class_age'] = 2013 - grant_class_base['class_born']
+
     # modal classone group stats
     class_groups = firm_totals.groupby('mode_class')
     class_sums = class_groups.sum()
@@ -308,9 +306,9 @@ if stage_min <= 3 and stage_max >= 3 and run3:
     firm_grants['n_ext_cited'] = firm_grants['n_cited'] - firm_grants['n_self_cited']
 
     grant_class_groups = firm_grants.groupby('classone')
-    grant_class_means = grant_class_groups.mean().rename(columns=dt.prefixer('grant_')).rename(columns=dt.postfixer('_mean')).drop(-1)
+    grant_class_means = grant_class_groups.mean().rename(columns=dt.prefixer('grant_')).rename(columns=dt.postfixer('_mean'))
     grant_class_info = grant_class_means.join(grant_class_base)
     grant_class_info['class_number'] = grant_class_info.index
 
     # merge both levels
-    datf_class = firm_class_info.join(grant_class_info)
+    datf_class = firm_class_info.join(grant_class_info).join(trans_class_means)

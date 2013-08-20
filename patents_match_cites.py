@@ -19,7 +19,7 @@ datf_trans = sqlio.read_frame('select assign_id,patnum,source_fn,dest_fn,execyea
 datf_cite.rename(columns={'citer':'citer_pnum','citee':'citee_pnum'},inplace=True)
 datf_firm_cite = datf_cite.merge(datf_grant,how='left',left_on='citer_pnum',right_on='patnum',suffixes=('','_citer'))
 datf_firm_cite = datf_firm_cite.drop(['patnum'],axis=1).rename(columns={'firm_num':'citer_fnum','fileyear':'cite_year'})
-datf_firm_cite = datf_firm_cite.merge(datf_grant.filter(['patnum','firm_num']),how='left',left_on='citee_pnum',right_on='patnum',suffixes=('','_citee'))
+datf_firm_cite = datf_firm_cite.merge(datf_grant[['patnum','firm_num']],how='left',left_on='citee_pnum',right_on='patnum',suffixes=('','_citee'))
 datf_firm_cite = datf_firm_cite.drop(['patnum'],axis=1).rename(columns={'firm_num':'citee_fnum'})
 datf_firm_cite['self_cite'] = (datf_firm_cite['citer_fnum'] == datf_firm_cite['citee_fnum'])
 
@@ -36,14 +36,14 @@ ncites_agg = pd.Series(datf_firm_cite_year.groupby(['citer_fnum','citee_fnum'])[
 datf_firm_cite_agg = pd.concat([first_cite_agg,ncites_agg],axis=1).reset_index()
 
 # determine whether acquiring firm cites selling firm
-datf_trans_firm = datf_trans.merge(datf_firm_cite_agg.filter(['citer_fnum','citee_fnum','first_cite','ncites']),how='left',left_on=['dest_fn','source_fn'],right_on=['citer_fnum','citee_fnum'])
+datf_trans_firm = datf_trans.merge(datf_firm_cite_agg[['citer_fnum','citee_fnum','first_cite','ncites']],how='left',left_on=['dest_fn','source_fn'],right_on=['citer_fnum','citee_fnum'])
 datf_trans_firm = datf_trans_firm.drop(['citer_fnum','citee_fnum'],axis=1).rename(columns={'first_cite':'dest_first_cite','ncites':'dest_ncites'})
-datf_trans_firm = datf_trans_firm.merge(datf_firm_cite_agg.filter(['citer_fnum','citee_fnum','first_cite','ncites']),how='left',left_on=['source_fn','dest_fn'],right_on=['citer_fnum','citee_fnum'])
+datf_trans_firm = datf_trans_firm.merge(datf_firm_cite_agg[['citer_fnum','citee_fnum','first_cite','ncites']],how='left',left_on=['source_fn','dest_fn'],right_on=['citer_fnum','citee_fnum'])
 datf_trans_firm = datf_trans_firm.drop(['citer_fnum','citee_fnum'],axis=1).rename(columns={'first_cite':'source_first_cite','ncites':'source_ncites'})
 datf_trans_firm = datf_trans_firm.fillna({'dest_ncites':0,'source_ncites':0})
 
 # determine whether patent was cited by acquiring firm
-datf_trans_pat = datf_trans.merge(datf_firm_cite.filter(['citer_fnum','citer_pnum','citee_pnum','cite_year']),how='left',left_on=['dest_fn','patnum'],right_on=['citer_fnum','citee_pnum'])
+datf_trans_pat = datf_trans.merge(datf_firm_cite[['citer_fnum','citer_pnum','citee_pnum','cite_year']],how='left',left_on=['dest_fn','patnum'],right_on=['citer_fnum','citee_pnum'])
 datf_trans_pat = datf_trans_pat.drop(['citer_fnum','citee_pnum'],axis=1)
 ncites_before = pd.Series(datf_trans_pat[datf_trans_pat['cite_year']<=datf_trans_pat['execyear']].groupby('assign_id').size(),name='ncites_before')
 ncites_after = pd.Series(datf_trans_pat[datf_trans_pat['cite_year']>datf_trans_pat['execyear']].groupby('assign_id').size(),name='ncites_after')
