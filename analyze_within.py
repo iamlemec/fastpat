@@ -1,13 +1,16 @@
-import numpy as np
-import sqlite3
-import pandas as pd
 import sys
 import itertools
+import json
+import sqlite3
+import numpy as np
+import pandas as pd
 import scipy.stats as stats
-import data_tools as dt
 import pandas.io.sql as sqlio
 
-run_flags = [True,True,True,True,True]
+import vector_tools as vt
+import data_tools as dt
+
+run_flags = [True,True,True,True,True,True]
 
 # execution state
 if len(sys.argv) == 1:
@@ -161,7 +164,8 @@ if run_flags[1]:
     firm_totals['rndi_cost'] = dt.noinf(firm_totals['rnd']/firm_totals['cost'])
     firm_totals['profit'] = dt.noinf(firm_totals['income']/firm_totals['revenue'])
     firm_totals['rnd_prod'] = dt.noinf(firm_totals['file_pnum']/firm_totals['rnd'])
-    firm_totals['markup'] = dt.noinf(firm_totals['revenue']/firm_totals['cogs'])
+    firm_totals['markup'] = dt.noinf(firm_totals['revenue']/firm_totals['cogs'])-1.0
+    firm_totals['markup_capx'] = dt.noinf(firm_totals['revenue']/(firm_totals['cogs']+firm_totals['capx']))-1.0
     firm_totals['cashi'] = dt.noinf(firm_totals['cash']/firm_totals['assets'])
     firm_totals['cost'] = firm_totals['fcost'] + firm_totals['cogs']
     firm_totals['fcost_frac'] = dt.noinf(firm_totals['fcost']/firm_totals['cost'])
@@ -206,9 +210,9 @@ if run_flags[2]:
 
     # cumulative fractions sorted by initial stock, excludes entrants obvi
     firm_size_cumsum = firm_incumbents[['count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort(columns='stock_start').cumsum().apply(lambda s: s.astype(np.float)/s.irow(-1))
-    firm_size_cumsum = firm_size_cumsum.set_index(np.linspace(0.0,1.0,len(firm_cumsum)))
+    firm_size_cumsum = firm_size_cumsum.set_index(np.linspace(0.0,1.0,len(firm_size_cumsum)))
     firm_age_cumsum = firm_incumbents[['age','count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort(columns='age').drop('age',axis=1).cumsum().apply(lambda s: s.astype(np.float)/s.irow(-1))
-    firm_age_cumsum = firm_age_cumsum.set_index(np.linspace(0.0,1.0,len(firm_cumsum)))
+    firm_age_cumsum = firm_age_cumsum.set_index(np.linspace(0.0,1.0,len(firm_age_cumsum)))
 
 if run_flags[3]:
     print 'Transfer size/age stats'
@@ -304,6 +308,7 @@ if run_flags[4]:
     firm_grants['grant_lag'] = firm_grants['grantyear'] - firm_grants['fileyear']
     firm_grants['trans_lag'] = firm_grants['first_trans'] - firm_grants['fileyear']
     firm_grants['n_ext_cited'] = firm_grants['n_cited'] - firm_grants['n_self_cited']
+    firm_grants['trans_3yr'] = firm_grants['trans_lag'] <= 3
 
     grant_class_groups = firm_grants.groupby('classone')
     grant_class_means = grant_class_groups.mean().rename(columns=dt.prefixer('grant_')).rename(columns=dt.postfixer('_mean'))
@@ -312,3 +317,41 @@ if run_flags[4]:
 
     # merge both levels
     datf_class = firm_class_info.join(grant_class_info).join(trans_class_means)
+
+if run_flags[5]:
+    # generate target values
+    targ_model = vt.Bundle()
+    targ_model['median_markup'] = firm_totals['markup'].median()-1.0
+    targ_model['agg_markup'] = firm_totals['revenue'].sum()/firm_totals['cogs'].sum()-1.0
+    targ_model['entry_rate_5year'] = firm_totals['entered'].mean()
+    targ_model['entrant_stock_frac'] = firm_totals['stock_end'][firm_totals['entered']].sum()/firm_totals['stock_end'].sum()
+    targ_model['internal_cite_frac'] = (firm_totals['n_self_cited']>0.0*firm_totals['n_cited']).mean()
+    targ_model['ind_ptrans_mean'] = datf_class['grant_pos_trans_mean'].mean()
+    targ_model['ind_ptrans_std'] = datf_class['grant_pos_trans_mean'].std()
+    targ_model['ptrans_3year'] = firm_grants['trans_3yr'].mean()/firm_grants['pos_trans'].mean()
+    targ_model['trans_younger_prob'] = 1.0 - trans_merge['age_up'].mean()
+    targ_model['trans_smaller_prob'] = 1.0 - trans_merge['size_up'].mean()
+    targ_model['trans_young_frac'] = firm_fracs_by_age[('dest_pnum',False)]
+    targ_model['trans_small_frac'] = firm_fracs_by_size[('dest_pnum',False)]
+    targ_model['stock_young_frac'] = firm_totals['stock_start'][firm_totals['age_bin']==0].sum().astype(np.float)/firm_totals['stock_start'].sum()
+    targ_model['stock_small_frac'] = firm_totals['stock_start'][firm_totals['size_bin']==0].sum().astype(np.float)/firm_totals['stock_start'].sum()
+    targ_model['stock_lgrowth_mean'] = firm_totals['stock_lgrowth'].mean()
+    targ_model['stock_lgrowth_young'] = firm_totals['stock_lgrowth'][firm_totals['age_bin']==0].mean()
+    targ_model['stock_lgrowth_small'] = firm_totals['stock_lgrowth'][firm_totals['size_bin']==0].mean()
+    targ_model['rnd_intensity_mean'] = firm_totals['rndi'].median()
+    targ_model['rnd_intensity_young'] = firm_totals['rndi'][firm_totals['age_bin']==0].median()
+    targ_model['rnd_intensity_small'] = firm_totals['rndi'][firm_totals['size_bin']==0].median()
+    json.dump(targ_model.dict(),open('/media/Liquid/work/sequential/data/patent/targets.json','w+'),indent=4)
+
+    # distributions for paper
+    markup_bins = np.linspace(0.0,1.0,16)
+    markup_data = firm_totals['markup'].dropna()
+    markup_mass = np.histogram(markup_data,bins=markup_bins)[0].astype(np.float)/len(markup_data)
+    markup_vals = 0.5*(markup_bins[:-1]+markup_bins[1:])
+
+    translag_bins = np.linspace(0.0,20.0,20)
+    translag_data = (trans_stats['execyear']-trans_stats['fileyear']).dropna()
+    translag_mass = np.histogram(translag_data,bins=translag_bins)[0].astype(np.float)/len(translag_data)
+    translag_vals = 0.5*(translag_bins[:-1]+translag_bins[1:])
+
+    json.dump({'markup_data':list(markup_mass),'translag_data':list(translag_mass)},open('/media/Liquid/work/sequential/data/patent/distributions.json','w+'),indent=4)
