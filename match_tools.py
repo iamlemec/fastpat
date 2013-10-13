@@ -4,10 +4,12 @@
 # select firm_num,sum(revenue) as rtot from firm_merge where firm_num>=1000000 group by firm_num order by rtot desc
 # select firm_num,sum(amount) as atot from firm_merge where firm_num>=2000000 group by firm_num order by atot desc
 
-import sqlite3
 import operator as op
-import pandas as pd
 from collections import OrderedDict
+import numpy as np
+import pandas as pd
+import sqlite3
+import pandas.io.sql as sqlio
 
 def unfurl(v,idx=0):
   return map(op.itemgetter(idx),v)
@@ -20,11 +22,12 @@ def argsort(seq):
 
 class infobot:
   def __init__(self):
-    self.conn = sqlite3.connect('/media/Liquid/data/patents/store/within.db')
-    self.cur = self.conn.cursor()
+    self.con = sqlite3.connect('/media/Liquid/data/patents/store/within.db')
+    self.cur = self.con.cursor()
+    self.cur.execute('attach ? as citedb',('store/citations.db',))
 
   def disconnect(self):
-    self.conn.close()
+    self.con.close()
 
   # find all earlier matches for a specific entry
   def fnum_info(self,fnum,nshow=10):
@@ -65,7 +68,7 @@ class infobot:
 
     # output
     print 'Looking up {}:'.format(tok)
-    print 
+    print
     print '\n'.join(['{:10d},{:10d}: {}'.format(num,pnum,name) for (num,name,pnum) in zip(fnums,fnames,pats)])
     print
     print '{} matches'.format(len(fnums))
@@ -83,21 +86,31 @@ class infobot:
 
     return datf
 
+  def grants_to(self,fnum,limit=50):
+    return sqlio.read_frame('select patnum,grantyear,fileyear,classone,classtwo,first_trans,ntrans,n_cited,n_citing,life_grant from grant_info where firm_num={} limit {}'.format(fnum,limit),self.con)
+
   def assignments_to(self,fnum):
     cur = self.cur
 
-    ret = cur.execute("""select execyear,ntrans,firm_source.name from (select * from assign_bulk where dest_fn=?) as firm_assign
+    ret = cur.execute("""select execyear,ntrans,firm_source.firm_num,firm_source.name from (select * from assign_bulk where dest_fn=?) as firm_assign
                          left outer join firm as firm_source on (firm_assign.source_fn = firm_source.firm_num) order by execyear""",(fnum,)).fetchall()
 
-    return pd.DataFrame(ret,columns=['year','ntrans','source_name'])
+    return pd.DataFrame(ret,columns=['year','ntrans','source_fnum','source_name'])
 
   def assignments_from(self,fnum):
     cur = self.cur
 
-    ret = cur.execute("""select execyear,ntrans,firm_dest.name from (select * from assign_bulk where source_fn=?) as firm_assign
+    ret = cur.execute("""select execyear,ntrans,firm_dest.firm_num,firm_dest.name from (select * from assign_bulk where source_fn=?) as firm_assign
                          left outer join firm as firm_dest on (firm_assign.dest_fn = firm_dest.firm_num) order by execyear""",(fnum,)).fetchall()
 
-    return pd.DataFrame(ret,columns=['year','ntrans','dest_name'])
+    return pd.DataFrame(ret,columns=['year','ntrans','dest_fnum','dest_name'])
+
+  def assignments_between(self,fnum_source,fnum_dest):
+    cur =self.cur
+
+    ret = cur.execute('select execyear,patnum from assign_info where source_fn=? and dest_fn=?',(fnum_source,fnum_dest)).fetchall()
+
+    return pd.DataFrame(ret,columns=['year','patnum'])
 
   def word_frequency(self,tok):
     cur = self.cur
@@ -108,7 +121,7 @@ class infobot:
 
     # output
     print 'Looking up {}:'.format(tok)
-    print 
+    print
     print '{:8d} instances'.format(count)
     print '{:8.5f} mean position'.format(mean_pos)
 
@@ -136,4 +149,26 @@ class infobot:
 
     print ret
 
+  def interesting_transfers(self,min_year=0,max_year=np.inf,cite_before_min=0,cite_after_min=0,num_select=10,dest_fnum=None):
+    cur = self.cur
 
+    query = 'select patnum,source_fn,dest_fn,ncites_before,ncites_after from trans_cite_pat where ncites_before>=? and ncites_after>=? and execyear>=? and execyear<=?'
+    if dest_fnum is not None: query += ' and dest_fn='+str(dest_fnum)
+    ret = cur.execute(query,(cite_before_min,cite_after_min,min_year,max_year)).fetchall()
+    if num_select is not None:
+      ret = [ret[i] for i in np.random.randint(0,len(ret),size=num_select)]
+    for (patnum,source_fn,dest_fn,ncites_before,ncites_after) in ret:
+      (source_name,) = cur.execute('select name from firm where firm_num=?',(source_fn,)).fetchone()
+      (dest_name,) = cur.execute('select name from firm where firm_num=?',(dest_fn,)).fetchone()
+      print '{:10d} ({:3d},{:3d}): {:40.40s} -> {:40.40s}'.format(patnum,int(ncites_before),int(ncites_after),source_name,dest_name)
+
+  def interesting_expires(self,min_year=0,max_year=np.inf,cite_before_min=0,expire_min=8,expire_max=12,num_select=10,fnum=None):
+    cur = self.cur
+
+    query = 'select patnum,firm_num,fileyear,n_citing,life_grant from grant_info where n_citing>=? and life_grant>=? and life_grant<=? and fileyear>=? and fileyear<=? limit 1000'
+    ret = cur.execute(query,(cite_before_min,expire_min,expire_max,min_year,max_year)).fetchall()
+    if num_select is not None:
+      ret = [ret[i] for i in np.random.randint(0,len(ret),size=num_select)]
+    for (patnum,firm_num,fileyear,ncites_before,life_grant) in ret:
+      (firm_name,) = cur.execute('select name from firm where firm_num=?',(firm_num,)).fetchone()
+      print '{:10d} ({:3d},{:3d}): {:40.40s}'.format(patnum,int(ncites_before),int(life_grant),firm_name)
