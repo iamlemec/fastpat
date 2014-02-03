@@ -372,7 +372,7 @@ if run_flags[5]:
     targ_model['file_stock_mean'] = firm_totals['file_stock_frac'].mean()
     targ_model['file_stock_young'] = firm_totals['file_stock_frac'][firm_totals['age_bin']==0].mean()
     targ_model['file_stock_small'] = firm_totals['file_stock_frac'][firm_totals['size_bin']==0].mean()
-    vt.Bundle(targ_model.dict()).to_json(file_name='/media/Liquid/work/sequential/data/patent/targets.json')
+    vt.Bundle(targ_model.dict()).to_json(file_name=data_dir+'targets.json')
 
     # distributions for paper
     markup_bins = np.linspace(0.0,1.0,16)
@@ -385,4 +385,4 @@ if run_flags[5]:
     translag_mass = np.histogram(translag_data,bins=translag_bins)[0].astype(np.float)/len(translag_data)
     translag_vals = 0.5*(translag_bins[:-1]+translag_bins[1:])
 
-    json.dump({'markup_data':list(markup_mass),'translag_data':list(translag_mass)},open('/media/Liquid/work/sequential/data/patent/distributions.json','w+'),indent=4)
+    json.dump({'markup_data':list(markup_mass),'translag_data':list(translag_mass)},open(data_dir+'distributions.json','w+'),indent=4)
