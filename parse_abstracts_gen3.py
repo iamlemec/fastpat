@@ -37,11 +37,9 @@ def commitBatch():
   del abstracts[:]
 
 def get_text(e):
-  text = e.text
-  if text is None:
-    return ' '.join([tostring(se) for se in e.getchildren()])
-  else:
-    return text
+  text = e.text or ''
+  text += ' '.join([tostring(se) for se in e.getchildren()])
+  return text
 
 # get an iterable
 context = iter(iterparse(in_fname,tag='us-patent-grant',remove_blank_text=True))
@@ -53,13 +51,17 @@ for (event,elem) in context:
     # top-level section
     bib = elem.find('us-bibliographic-data-grant')
     pubref = bib.find('publication-reference')
+    appref = bib.find('application-reference')
 
-    # patent info
-    docinfo = pubref.find('document-id')
-    patnum = docinfo.find('doc-number').text
+    # patent number
+    pubinfo = pubref.find('document-id')
+    patnum = pubinfo.find('doc-number').text
     if patnum[0] != '0': continue
     patnum = int(patnum[1:])
-    date = docinfo.find('date').text
+
+    # filing date
+    appinfo = appref.find('document-id')
+    date = appinfo.find('date').text
 
     # roll it in
     abstract = elem.find('abstract')
