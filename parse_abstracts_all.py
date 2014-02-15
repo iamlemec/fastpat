@@ -36,4 +36,6 @@ gen3_files.sort()
 for f in gen3_files:
   print '{}: gen 3'.format(f)
   cmd = cmd_fmt.format(3,f)
-  os.system(cmd)
+  if os.system(cmd) != 0:
+    print 'Subprocess failed, bailing.'
+    break

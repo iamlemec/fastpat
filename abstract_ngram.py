@@ -47,7 +47,9 @@ cumfreq = np.zeros(ntoks)
 
 # storage
 cur.execute('drop table if exists cumfreq')
+cur.execute('drop table if exists totfreq')
 cur.execute('create table cumfreq (date text, label text, cfreq real)')
+cur.execute('create table totfreq (date text, tfreq real)')
 
 # decay rate
 decay_year = 0.1 # yearly
@@ -60,13 +62,13 @@ for d in daterange(start_date,end_date):
 
   # insert todays history
   cur.executemany('insert into cumfreq values (?,?,?)',izip(ntoks*[datestr],tokens,cumfreq))
+  cur.execute('insert into totfreq values (?,?)',datestr,np.sum(cumfreq))
 
   # update weightings
   labels = unfurl(cur.execute('select label from ngram where date=?',(datestr,)).fetchall())
   indexes = map(tokmap.get,labels)
   cumfreq *= discount
   cumfreq[indexes] += 1.0
-  cumfreq /= np.sum(cumfreq)
 
 # clean up
 conn.commit()
