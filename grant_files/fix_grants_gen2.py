@@ -21,4 +21,3 @@ for f in os.listdir('.'):
     os.system(fc2)
     os.system(fc3)
     os.system(fc4)
-
