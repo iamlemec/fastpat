@@ -17,7 +17,7 @@ cmd_cite = 'insert into citation values (?,?)'
 
 # pull in NBER <=2006 citations
 cite_fname = 'nber_files/cite76_06.csv'
-citeReader = csv.reader(open(cite_fname,'rb'),delimiter='\t',quotechar='\"')
+citeReader = csv.reader(open(cite_fname,'rb'))
 next(citeReader,None) # skip header row
 batch_size = 1000000
 

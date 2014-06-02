@@ -16,10 +16,16 @@ cmd_same = 'update assignment set same_flag=? where rowid=?'
 # create flag tables
 try:
   cur.execute('alter table assignment add column same_flag int default 0')
+except:
+  pass
 try:
   cur.execute('alter table assignment add column dup_flag int default 0')
+except:
+  pass
 try:
   cur.execute('alter table assignment add column use_flag int default 0')
+except:
+  pass
 
 batch_size = 1000
 same_flags = []

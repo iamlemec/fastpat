@@ -45,15 +45,6 @@ if stage <= 0:
   ht_classes = (340,375,379,701,370,345,353,367,381,382,386,235,361,365,700,708,710,713,714,719,318,706,342,343,455,438,711,716,341,712,705,707,715,717)
   cur.execute('update grant_info set high_tech=1 where classone in ('+','.join(map(str,ht_classes))+')')
 
-  cur.execute('drop table if exists assign_info')
-  cur.execute('create table assign_info (assign_id int primary key, patnum int, source_fn int, dest_fn int, execyear int, recyear int, grantyear int, fileyear int, classone int, classtwo int)')
-  cur.execute("""insert into assign_info select assignment_use.rowid,assignment_use.patnum,source_fn,dest_fn,strftime(\'%Y\',execdate),strftime(\'%Y\',recdate),strftime(\'%Y\',grantdate),strftime(\'%Y\',filedate),classone,classtwo
-                 from assignment_use left outer join assign_match on (assignment_use.rowid = assign_match.assign_id)""")
-
-  cur.execute('drop table if exists assign_bulk')
-  cur.execute('create table assign_bulk (source_fn int, dest_fn int, execyear int, ntrans int)')
-  cur.execute('insert into assign_bulk select source_fn,dest_fn,execyear,count(*) from assign_info group by source_fn,dest_fn,execyear')
-
 if stage <= 1:
   # aggregate by firm-year
   print 'Aggregate by firm-year'

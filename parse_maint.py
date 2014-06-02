@@ -10,7 +10,7 @@ cur = con.cursor()
 # import to dataframe
 print 'Writing table'
 
-datf = pd.read_csv('maint_files/MaintFeeEvents_20130610.txt',sep=' ',error_bad_lines=False,header=0,usecols=[0,2,6],names=['patnum','is_small','event_code'])
+datf = pd.read_csv('maint_files/MaintFeeEvents_20140310.txt',sep=' ',error_bad_lines=False,header=0,usecols=[0,2,6],names=['patnum','is_small','event_code'])
 cur.execute('drop table if exists maint')
 sqlio.write_frame(datf,'maint',con)
 

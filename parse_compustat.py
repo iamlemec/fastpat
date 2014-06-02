@@ -33,6 +33,7 @@ sqlio.write_frame(datf[['gvkey','name']],'firmname',con,if_exists='replace')
 # clean up and generate primary key on firmyear
 cur.execute("""delete from firmyear where year=''""")
 cur.execute("""delete from firmyear where rowid not in (select min(rowid) from firmyear group by gvkey,year)""")
+cur.execute("""delete from firmyear where name is null""")
 cur.execute("""create unique index firmyear_idx on firmyear(gvkey asc, year asc)""")
 
 # remove duplicates and generate primary key on firmname

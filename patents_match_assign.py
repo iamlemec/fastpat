@@ -38,8 +38,20 @@ for (assign_id,source_name,dest_name) in cur_pats.execute('select rowid,assignor
   if rnum%10000 == 0:
     print rnum
 
+# close patent side and attach
+conn_pats.close()
+cur_within.execute('attach ? as patdb',(db_fname_pats,))
+
+# merge into existing data
+cur_within.execute('drop table if exists assign_info')
+cur_within.execute('create table assign_info (assign_id int primary key, patnum int, source_fn int, dest_fn int, execyear int, recyear int, grantyear int, fileyear int, classone int, classtwo int)')
+cur_within.execute("""insert into assign_info select assignment_use.rowid,assignment_use.patnum,source_fn,dest_fn,strftime(\'%Y\',execdate),strftime(\'%Y\',recdate),strftime(\'%Y\',grantdate),strftime(\'%Y\',filedate),classone,classtwo
+                      from assignment_use left outer join assign_match on (assignment_use.rowid = assign_match.assign_id)""")
+
+cur_within.execute('drop table if exists assign_bulk')
+cur_within.execute('create table assign_bulk (source_fn int, dest_fn int, execyear int, ntrans int)')
+cur_within.execute('insert into assign_bulk select source_fn,dest_fn,execyear,count(*) from assign_info group by source_fn,dest_fn,execyear')
+
 # clean up
 conn_within.commit()
 conn_within.close()
-conn_pats.close()
-

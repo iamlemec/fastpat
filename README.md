@@ -44,10 +44,13 @@ Parse patent grant and assignment info from USPTO and match with compustat data.
 * patent assignments parse: parse_assign_all.py
 * merge grants/assignments: fix_patent_tables.py
 * flag redundant assignments: flag_assign_dups.py
-* compustat parse: parse_compustat.py
-* match grant data: patents_match_grant.py
+* parse compustat: parse_compustat.py
+* parse citation data: parse_cites_all.py
+* parse maintenance data: parse_maint.py
+* match grant data: patents_match_grants.py
 * match assign data on top: patents_match_assign.py
 * match compustat data on top: patents_match_compustat.py
+* match citation data: patents_match_cites.py
 * merge it all together: patents_match_merge.py
 
 ## Database layout
@@ -55,7 +58,7 @@ Parse patent grant and assignment info from USPTO and match with compustat data.
 * patents.db:
   * patent: (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)
   * assignment: (patnum int, execdate text, recdate text, conveyance text, assignor text, assignee text)
-  
+
 * compustat.db:
   * firmyear: (gvkey int, year int, income real, revenue real, rnd real) + (source_pnum int, dest_pnum int)
   * firmname: (gvkey int, name text)

@@ -21,7 +21,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, orgname text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)")
   except sqlite3.OperationalError as e:
     print e
 

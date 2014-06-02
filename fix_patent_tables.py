@@ -11,6 +11,7 @@ if stage <= 0:
   print 'Creating primary key on patnum'
 
   # create primary key for patent
+  cur.execute("""delete from patent where rowid not in (select min(rowid) from patent group by patnum)""")
   cur.execute("""create unique index patnum_idx on patent (patnum asc)""")
 
 if stage <= 1:
@@ -56,6 +57,11 @@ if stage <= 3:
   cur.execute("""drop table assignment""")
   cur.execute("""alter table assignment2 rename to assignment""")
   cur.execute("""delete from assignment where filedate is null or grantdate is null""")
+
+if stage <= 4:
+  print 'Selecting only valid patents'
+
+  cur.execute("""create table patent_use as select * from patent where owner!=''""")
 
 # close db
 conn.commit()

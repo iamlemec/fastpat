@@ -78,7 +78,7 @@ class GrantHandler:
     self.patint = self.patnum[1:8]
     self.class_one = self.class_str[:3]
     self.class_two = self.class_str[3:6]
-    self.orgname_esc = self.orgname.encode('ascii','ignore').upper()
+    self.orgname_esc = self.orgname.decode('utf-8','replace').upper()
 
     #print '{:.8} {} {} {:.3} {:.3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc)
 
