@@ -306,7 +306,7 @@ if run_flags[4]:
     firm_class_info['agg_acquire_int'] = dt.noinf(class_sums['acquire']/class_sums['assets'])
     firm_class_info['agg_dest_ffrac'] = dt.noinf(class_sums['dest_pnum']/class_sums['file_pnum'])
     firm_class_info['class_size'] = class_counts
-    firm_class_info['herfindahl'] = dt.noinf(class_groups['employ'].apply(lambda s: np.sort(s).dropna()[-1::-1][:np.ceil(0.1*s.count())].sum()/s.sum()))
+    firm_class_info['herfindahl'] = dt.noinf(class_groups['employ'].apply(lambda s: s.order().dropna()[-1::-1][:np.ceil(0.1*s.count()).astype(np.int)].sum()/s.sum()))
     firm_class_info['herfindahl'][firm_class_info['class_size']<10] = np.nan
     firm_class_info['entrant_stock_frac'] = class_groups.apply(lambda df: df['stock_end'][df['entered']].sum()/df['stock_end'].sum())
     firm_class_info['entrant_employ_frac'] = class_groups.apply(lambda df: df['employ_end'][df['entered']].sum()/df['employ_end'].sum())
