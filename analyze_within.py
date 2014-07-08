@@ -104,14 +104,15 @@ if run_flags[1]:
     print 'Firm/industry level analysis'
 
     # data selection parameters
-    type_int_cols = ['firm_num','year','naics2','naics3','mode_class','age']
+    index_cols = ['firm_num']
+    type_int_cols = ['year','naics2','naics3','mode_class','age']
     type_float_cols = ['employ','revenue','income','stock','mktval','intan','assets','mode_frac','high_tech']
     type_bool_cols = ['size_bin','age_bin','ht_bin']
     sum_float_cols = ['assets','capx','cash','cogs','deprec','intan','debt','employ','income','revenue','sales','rnd','fcost','mktval','acquire',
                       'file_pnum','grant_pnum','source_pnum','dest_pnum','trans_pnum','expire_pnum','n_cited','n_self_cited','n_ext_cited','n_citing']
     type_cols = type_int_cols + type_float_cols + type_bool_cols
     pure_type_cols = list(set(type_cols)-set(sum_float_cols))
-    all_cols = list(set(type_cols+sum_float_cols))
+    all_cols = list(set(index_cols+type_cols+sum_float_cols))
 
     # select our target data
     firm_panel = datf_idx[all_cols]
