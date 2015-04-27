@@ -43,7 +43,7 @@ gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
 # standardize a firm name
 def name_standardize(name):
   name_strip = name
-  name_strip = post0_re.sub('',name_strip)
+  #name_strip = post0_re.sub('',name_strip)
   name_strip = acronym1_re.sub(r"\1\2\3",name_strip)
   name_strip = acronym2_re.sub(r"\1\2",name_strip)
   name_strip = acronym3_re.sub(r"\1\2\3",name_strip)
@@ -54,9 +54,7 @@ def name_standardize(name):
   name_strip = punct0_re.sub('',name_strip)
   name_strip = punct1_re.sub(' ',name_strip)
   name_strip = gener_re.sub('',name_strip)
-  name_toks = name_strip.split()
-  return name_toks
-
+  return name_strip.split()
 
 # detect matches
 cmd_name = 'select name from firmname where gvkey=?'
