@@ -266,6 +266,21 @@ class Cluster:
 import sqlite3
 from standardize import name_standardize
 
+def generate_namestd():
+    con = sqlite3.connect('store/patents.db')
+    cur = con.cursor()
+
+    cur.execute('drop table if exists patent_std')
+    cur.execute('create table patent_std as (patnum int, owner text)')
+
+    for (patnum,name) in cur.execute("select patnum,owner from patent where owner!=''"):
+        name = ' '.join(name_standardize(name))
+        if name:
+            cur.execute('insert into patent_std vales (?,?)',(patnum,name))
+
+    con.commit()
+    con.close()
+
 def firm_buckets(cur,npat=None,kshingle=2,**kwargs):
     c = Cluster(**kwargs)
 

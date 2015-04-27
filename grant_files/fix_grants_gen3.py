@@ -1,8 +1,14 @@
 import sys
 import os
 
+curl = '{}'
+if sys.platform == 'darwin':
+  sed = 'gsed'
+else:
+  sed = 'sed'
+
 cmd1 = """echo '<root>' > {}"""
-cmd2 = """cat {} | sed '/?xml/d' | sed '/!DOCTYPE/d' >> {}"""
+cmd2 = """cat {curl} | {sed} '/?xml/d' | {sed} '/!DOCTYPE/d' >> {curl}""".format(sed=sed,curl=curl)
 cmd3 = """echo '</root>' >> {}"""
 cmd4 = """mv {} {}"""
 

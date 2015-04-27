@@ -1,12 +1,23 @@
 import sys
 import os
 
+curl = '{}'
+if sys.platform == 'darwin':
+  sed = 'gsed'
+else:
+  sed = 'sed'
+
 cmd1 = """echo '<root>' > {}"""
-cmd2 = """cat {} | sed '/^<?/d' | sed '/^<!/d' | sed '/^]>/d' | sed 's/&/&amp;/g' >> {}"""
+cmd2 = """cat {curl} | {sed} '/^<?/d' | {sed} '/^<!/d' | {sed} '/^]>/d' | {sed} 's/&/&amp;/g' >> {curl}""".format(sed=sed,curl=curl)
 cmd3 = """echo '</root>' >> {}"""
 cmd4 = """mv {} {}"""
 
-for f in os.listdir('.'):
+if len(sys.argv) > 1:
+  flist = sys.argv[1:]
+else:
+  flist = os.listdir('.')
+
+for f in flist:
   if f.startswith('pgb') and f.endswith('.xml'):
     print f
 
