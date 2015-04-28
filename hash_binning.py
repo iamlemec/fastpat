@@ -271,20 +271,23 @@ def generate_namestd():
     cur = con.cursor()
 
     cur.execute('drop table if exists patent_std')
-    cur.execute('create table patent_std as (patnum int, owner text)')
+    cur.execute('create table patent_std (patnum int, owner text)')
 
-    for (patnum,name) in cur.execute("select patnum,owner from patent where owner!=''"):
+    for (patnum,name) in cur.execute("select patnum,owner from patent where owner!=''").fetchall():
         name = ' '.join(name_standardize(name))
         if name:
-            cur.execute('insert into patent_std vales (?,?)',(patnum,name))
+            cur.execute('insert into patent_std values (?,?)',(patnum,name))
 
     con.commit()
     con.close()
 
-def firm_buckets(cur,npat=None,kshingle=2,**kwargs):
+def firm_buckets(npat=None,kshingle=2,**kwargs):
+    con = sqlite3.connect('store/patents.db')
+    cur = con.cursor()
+
     c = Cluster(**kwargs)
 
-    cmd = "select patnum,owner from patent where owner!=''"
+    cmd = "select patnum,owner from patent_std"
     if npat: cmd += " limit {}".format(npat)
 
     name_dict = {}
@@ -293,5 +296,7 @@ def firm_buckets(cur,npat=None,kshingle=2,**kwargs):
         if not name: continue
         name_dict[patnum] = name
         c.add(frozenset(shingle(name,kshingle)),label=patnum)
+
+    con.close()
 
     return [[name_dict[pn] for pn in grp] for grp in c.groups()]

@@ -4,10 +4,6 @@ import re
 import collections
 import itertools
 
-# postscripts
-post0 = r"(\bA CORP.|;|,).*$"
-post0_re = re.compile(post0)
-
 # acronyms
 acronym1 = r"\b(\w) (\w) (\w)\b"
 acronym1_re = re.compile(acronym1)
@@ -34,16 +30,36 @@ punct1_re = re.compile(punct1)
 states = ['DEL','DE','NY','VA','CA','PA','OH','NC','WI','MA']
 compustat = ['PLC','CL','REDH','ADR','FD','LP','CP','TR','SP','COS','GP','OLD','NEW']
 generics = ['THE','A','OF','AND','AN']
-corps = ['CORPORATION','INCORPORATED','COMPANY','LIMITED','KABUSHIKI','KAISHA','AKTIENGESELLSCHAFT','AKTIEBOLAG','INC','LLC','LTD','CORP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE']
-typos = ['CORPORATIN','CORPORATON']
-variants = ['TRUST','GROUP','GRP','HLDGS','HOLDINGS','COMM','INDS','COMM','HLDG','TECH','INTERNATIONAL']
-dropout = states + compustat + generics + corps + typos + variants
+corps = ['CORPORATION','INCORPORATED','COMPANY','LIMITED','KABUSHIKI','KAISHA','AKTIENGESELLSCHAFT','AKTIEBOLAG','INC','LLC','LTD','CORP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
+dropout = states + compustat + generics + corps
 gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
+
+# substitutions - essentially lower their weighting
+subsies = {
+  'TECHNOLOGIES': 'TECH',
+  'TECHNOLOGY': 'TECH',
+  'MANUFACTURING': 'MANUF',
+  'SEMICONDUCTORS': 'SEMI',
+  'SEMICONDUCTOR': 'SEMI',
+  'RESEARCH': 'RES',
+  'COMMUNICATIONS': 'COMM',
+  'COMMUNICATION': 'COMM',
+  'SYSTEMS': 'SYS',
+  'PHARMACEUTICALS': 'PHARMA',
+  'PHARMACEUTICAL': 'PHARMA',
+  'ELECTRONICS': 'ELEC',
+  'INTERNATIONAL': 'INTL',
+  'INDUSTRIES': 'INDS',
+  'INDUSTRY': 'INDS',
+  'CHEMICALS': 'CHEM',
+  'CHEMICAL': 'CHEM'
+}
+subsies_re = re.compile(r'\b(' + '|'.join(subsies.keys()) + r')\b')
 
 # standardize a firm name
 def name_standardize(name):
   name_strip = name
-  #name_strip = post0_re.sub('',name_strip)
+
   name_strip = acronym1_re.sub(r"\1\2\3",name_strip)
   name_strip = acronym2_re.sub(r"\1\2",name_strip)
   name_strip = acronym3_re.sub(r"\1\2\3",name_strip)
@@ -51,9 +67,14 @@ def name_standardize(name):
   name_strip = acronym5_re.sub(r"\1\2",name_strip)
   name_strip = acronym6_re.sub(r"\1\2",name_strip)
   name_strip = acronym7_re.sub(r"\1\2",name_strip)
+
   name_strip = punct0_re.sub('',name_strip)
   name_strip = punct1_re.sub(' ',name_strip)
+
   name_strip = gener_re.sub('',name_strip)
+
+  name_strip = subsies_re.sub(lambda x: subsies[x.group()],name_strip)
+
   return name_strip.split()
 
 # detect matches
