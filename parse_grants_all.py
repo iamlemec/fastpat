@@ -37,18 +37,27 @@ else:
 parsed_fid = open('grant_files/parsed.txt','a+')
 
 # execute
+failed_fnames = []
 def parse_gen(fname,gen):
   print '{}: gen {}'.format(fname,gen)
-  if f in parsed_fnames:
+  if fname in parsed_fnames:
     print 'Already parsed'
   else:
-    cmd = cmd_fmt.format(gen,f)
+    cmd = cmd_fmt.format(gen,fname)
     ret = os.system(cmd)
     if ret == 0:
-      parsed_fid.write(f+'\n')
+      print 'SUCCESS'
+      parsed_fid.write(fname+'\n')
     else:
-      print 'PARSE FAILED'
+      print 'FAILED'
+      failed_fnames.append(fname)
+  print
 
 for f in gen1_files: parse_gen(f,1)
 for f in gen2_files: parse_gen(f,2)
 for f in gen3_files: parse_gen(f,3)
+
+if len(failed_fnames):
+  print
+  print 'FAILED FILES:'
+  print '\n'.join(failed_fnames)

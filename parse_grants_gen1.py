@@ -20,7 +20,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, owner text)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -30,7 +30,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
 # SAX hanlder for gen1 patent grants
@@ -71,6 +71,9 @@ class GrantHandler:
     elif name == 'OCL':
       if self.section == 'CLAS':
         self.class_str = text
+    elif name == 'ICL':
+      if self.section == 'CLAS':
+        self.ipc_str = text
 
   def addPatent(self):
     self.completed += 1
@@ -78,11 +81,13 @@ class GrantHandler:
     self.patint = self.patnum[1:8]
     self.class_one = self.class_str[:3]
     self.class_two = self.class_str[3:6]
+    self.ipc_ver = 'GEN1'
+    self.ipc_code = self.ipc_str[:4] + self.ipc_str[4:7].strip() + '/' + self.ipc_str[7:].strip()
     self.orgname_esc = self.orgname.decode('utf-8','replace').upper()
 
-    #print '{:.8} {} {} {:.3} {:.3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:12.12} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc)
 
-    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc))
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc))
     if len(patents) == batch_size:
       commitBatch()
 

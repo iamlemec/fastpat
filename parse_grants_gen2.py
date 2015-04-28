@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from xml.sax import handler, make_parser, SAXException
+from xml.sax import xmlreader, handler, make_parser, SAXException
 import sys
 import sqlite3
 
@@ -21,7 +21,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, owner text)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -31,13 +31,14 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
 # XML codes gen2
 # B110 - patent number section (PDAT)
 # B140 - grant date section (PDAT)
 # B220 - issue date section (PDAT)
+# B511 - international patent class (PDAT)
 # B521 - classification section (PDAT)
 # B731 - original assignee name section (NAM->PDAT)
 
@@ -53,8 +54,10 @@ class GrantHandler(handler.ContentHandler):
     self.in_grantdate_sec = False
     self.in_filedate = False
     self.in_filedate_sec = False
-    self.in_class_sec = False
+    self.in_ipc = False
+    self.in_ipc_sec = False
     self.in_class = False
+    self.in_class_sec = False
     self.in_orgname = False
     self.in_orgname_sec = False
     self.in_orgname_sec2 = False
@@ -69,6 +72,7 @@ class GrantHandler(handler.ContentHandler):
       self.patnum = ''
       self.grant_date = ''
       self.file_date = ''
+      self.ipc_str = ''
       self.class_str = ''
       self.orgname = ''
     elif name == 'B110':
@@ -77,8 +81,10 @@ class GrantHandler(handler.ContentHandler):
       self.in_grantdate_sec = True
     elif name == 'B220':
       self.in_filedate_sec = True
+    elif name == 'B511':
+      self.in_ipc_sec = True
     elif name == 'B521':
-      self.in_class = True
+      self.in_class_sec = True
     elif name == 'B731':
       self.in_orgname_sec = True
     elif name == 'NAM':
@@ -91,6 +97,8 @@ class GrantHandler(handler.ContentHandler):
         self.in_grantdate = True
       elif self.in_filedate_sec:
         self.in_filedate = True
+      elif self.in_ipc_sec:
+        self.in_ipc = True
       elif self.in_class_sec:
         self.in_class = True
       elif self.in_orgname_sec2:
@@ -107,6 +115,8 @@ class GrantHandler(handler.ContentHandler):
       self.in_grantdate_sec = False
     elif name == 'B220':
       self.in_filedate_sec = False
+    elif name == 'B511':
+      self.in_ipc_sec = False
     elif name == 'B521':
       self.in_class_sec = False
     elif name == 'B731':
@@ -120,6 +130,8 @@ class GrantHandler(handler.ContentHandler):
         self.in_grantdate = False
       elif self.in_filedate:
         self.in_filedate = False
+      elif self.in_ipc:
+        self.in_ipc = False
       elif self.in_class:
         self.in_class = False
       elif self.in_orgname:
@@ -132,6 +144,8 @@ class GrantHandler(handler.ContentHandler):
       self.grant_date += content
     elif self.in_filedate:
       self.file_date += content
+    elif self.in_ipc:
+      self.ipc_str = content
     elif self.in_class:
       self.class_str += content
     elif self.in_orgname:
@@ -141,21 +155,28 @@ class GrantHandler(handler.ContentHandler):
     self.completed += 1
 
     self.patint = self.patnum[1:]
+    self.ipc_ver = 'GEN2'
+    self.ipc_code = self.ipc_str[:4] + self.ipc_str[5:7].strip() + '/' + self.ipc_str[7:].strip()
     self.class_one = self.class_str[:3]
     self.class_two = self.class_str[3:6]
     self.orgname_esc = self.orgname.replace('&amp;','&').encode('ascii','ignore').upper()
 
-    #print '{:8} {} {} {:.3} {:.3} {:.30}'.format(self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:12.12} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc)
 
-    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.orgname_esc))
+    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc))
     if len(patents) == batch_size:
       commitBatch()
 
 # do parsing
-parser = make_parser()
 grant_handler = GrantHandler()
+
+input_source = xmlreader.InputSource()
+input_source.setEncoding('iso-8859-1')
+input_source.setByteStream(open(in_fname))
+
+parser = make_parser()
 parser.setContentHandler(grant_handler)
-parser.parse(in_fname)
+parser.parse(input_source)
 
 # clear out the rest
 if len(patents) > 0:
