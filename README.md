@@ -79,3 +79,10 @@ Parse patent grant and assignment info from USPTO and match with compustat data.
   * naics_co09.csv: concordance between US Patent Classes (USPC) and NAICS codes
   * sic_co08.csv: concordance between USPC and SIC codes
 
+## Notes
+
+* cut off names above a certain length, say longest 2%
+* Assignee country:
+  - gen1: CNT[:2]
+  - gen2: B731 -> CTRY
+  - gen3: assignee -> country

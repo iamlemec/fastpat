@@ -40,7 +40,7 @@ def commitBatch():
 # B220 - issue date section (PDAT)
 # B511 - international patent class (PDAT)
 # B521 - classification section (PDAT)
-# B731 - original assignee name section (NAM->PDAT)
+# B731 - original assignee name section (name: NAM->PDAT, country: CTRY->PDAT)
 
 # SAX hanlder for gen2 patent grants
 class GrantHandler(handler.ContentHandler):

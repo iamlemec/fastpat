@@ -266,14 +266,18 @@ class Cluster:
 import sqlite3
 from standardize import name_standardize
 
-def generate_namestd():
+# generate standardized names
+def generate_namestd(npat=None):
     con = sqlite3.connect('store/patents.db')
     cur = con.cursor()
 
     cur.execute('drop table if exists patent_std')
     cur.execute('create table patent_std (patnum int, owner text)')
 
-    for (patnum,name) in cur.execute("select patnum,owner from patent where owner!=''").fetchall():
+    cmd = "select patnum,owner from patent where owner!=''"
+    if npat: cmd += " limit {}".format(npat)
+
+    for (patnum,name) in cur.execute(cmd).fetchall():
         name = ' '.join(name_standardize(name))
         if name:
             cur.execute('insert into patent_std values (?,?)',(patnum,name))

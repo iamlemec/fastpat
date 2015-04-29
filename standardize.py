@@ -27,15 +27,22 @@ punct0_re = re.compile(punct0)
 punct1_re = re.compile(punct1)
 
 # generic terms
-states = ['DEL','DE','NY','VA','CA','PA','OH','NC','WI','MA']
-compustat = ['PLC','CL','REDH','ADR','FD','LP','CP','TR','SP','COS','GP','OLD','NEW']
-generics = ['THE','A','OF','AND','AN']
-corps = ['CORPORATION','INCORPORATED','COMPANY','LIMITED','KABUSHIKI','KAISHA','AKTIENGESELLSCHAFT','AKTIEBOLAG','INC','LLC','LTD','CORP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
-dropout = states + compustat + generics + corps
-gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
+# states = ['DEL','DE','NY','VA','CA','PA','OH','NC','WI','MA']
+# compustat = ['PLC','CL','REDH','ADR','FD','LP','CP','TR','SP','COS','GP','OLD','NEW']
+# generics = ['THE','A','OF','AND','AN']
+# corps = ['INC','LLC','LTD','CORP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
+# dropout = states + compustat + generics + corps
+# gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
 
 # substitutions - essentially lower their weighting
 subsies = {
+  'CORPORATION': 'CORP',
+  'INCORPORATED': 'INC',
+  'COMPANY': 'COMP',
+  'LIMITED': 'LTD',
+  'KABUSHIKI KAISHA': 'KK',
+  'AKTIENGESELLSCHAFT': 'AG',
+  'AKTIEBOLAG': 'AB',
   'TECHNOLOGIES': 'TECH',
   'TECHNOLOGY': 'TECH',
   'MANUFACTURING': 'MANUF',
@@ -52,7 +59,51 @@ subsies = {
   'INDUSTRIES': 'INDS',
   'INDUSTRY': 'INDS',
   'CHEMICALS': 'CHEM',
-  'CHEMICAL': 'CHEM'
+  'CHEMICAL': 'CHEM',
+  'LABORATORIES': 'LABS',
+  'LABORATORY': 'LABS',
+  'PRODUCTS': 'PROD',
+  'ENGINEERING': 'ENG',
+  'RESEARCH': 'RES',
+  'DEVELOPMENT': 'DEV',
+  'REPRESENTED': 'REPR',
+  'SECRETARY': 'SECR',
+  'PRODUCTS': 'PROD',
+  'INDUSTRIAL': 'IND',
+  'ASSOCIATES': 'ASSOC',
+  'INSTRUMENTS': 'INSTR',
+  'NATIONAL': 'NATL',
+  'STANDARD': 'STD',
+  'ORGANIZATION': 'ORG',
+  'EQUIPMENT': 'EQUIP',
+  'GESELLSCHAFT': 'GS',
+  'INSTITUTE': 'INST',
+  'MASCHINENFABRIK': 'MF',
+  'AKTIEBOLAGET': 'AB',
+  'SEISAKUSHO': 'SSS',
+  'COMPAGNIE': 'COMP',
+  'NATIONALE': 'NATL',
+  'FOUNDATION': 'FOUND',
+  'CONTINENTAL': 'CONTL',
+  'INTERCONTINENTAL': 'INTER',
+  'INDUSTRIE': 'IND',
+  'INDUSTRIELLE': 'IND',
+  'ELECTRICAL': 'ELEC',
+  'ELECTRIC': 'ELEC',
+  'UNIVERSITY': 'UNIV',
+  'MICROSYSTEMS': 'MICRO',
+  'MICROELECTRONICS': 'MICRO',
+  'TELECOMMUNICATIONS': 'TELE',
+  'HOLDINGS': 'HLDG',
+  'MASSACHUSSETTES': 'MASS',
+  'MINNESOTA': 'MINN',
+  'MANAGEMENT': 'MGMT',
+  'DEPARTMENT': 'DEP',
+  'ADMINISTRATOR': 'ADMIN',
+  'KOMMANDITGESELLSCHAFT': 'KG',
+  'INNOVATIONS': 'INNOV',
+  'INNOVATION': 'INNOV',
+  'ENTERTAINMENT': 'ENTER'
 }
 subsies_re = re.compile(r'\b(' + '|'.join(subsies.keys()) + r')\b')
 
@@ -71,7 +122,7 @@ def name_standardize(name):
   name_strip = punct0_re.sub('',name_strip)
   name_strip = punct1_re.sub(' ',name_strip)
 
-  name_strip = gener_re.sub('',name_strip)
+  #name_strip = gener_re.sub('',name_strip)
 
   name_strip = subsies_re.sub(lambda x: subsies[x.group()],name_strip)
 
