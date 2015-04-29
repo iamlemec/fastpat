@@ -1,8 +1,9 @@
 #!/usr/bin/python
 
-from xml.sax import handler, make_parser, SAXException
 import sys
 import sqlite3
+from xml.sax import make_parser
+from parse_grants_common import PathHandler
 
 # handle arguments
 if len(sys.argv) <= 1:
@@ -35,172 +36,95 @@ def commitBatch():
   del patents[:]
 
 # SAX hanlder for gen3 patent grants
-class GrantHandler(handler.ContentHandler):
+class GrantHandler(PathHandler):
   def __init__(self):
-    pass
-
-  def startDocument(self):
-    self.in_pubref = False
-    self.in_appref = False
-    self.in_patnum = False
-    self.in_grantdate = False
-    self.in_filedate = False
-    self.in_fos = False
-    self.in_classnat = False
-    self.in_mainclass = False
-    self.in_assignee = False
-    self.in_orgname = False
-
-    self.in_ipc = False
-    self.in_ipc_version = False
-    self.in_ipc_section = False
-    self.in_ipc_class = False
-    self.in_ipc_subclass = False
-    self.in_ipc_group = False
-    self.in_ipc_subgroup = False
+    track_keys = ['us-patent-grant','publication-reference','application-reference','doc-number',
+                 'classification-national','main-classification','classification-ipcr','ipc-version-indicator',
+                 'section','class','subclass','main-group','subgroup','date','assignee','orgname','country']
+    start_keys = ['us-patent-grant','classification-ipcr','assignee']
+    end_keys = ['us-patent-grant','classification-ipcr','assignee']
+    PathHandler.__init__(self,track_keys=track_keys,start_keys=start_keys,end_keys=end_keys)
 
     self.completed = 0
 
-  def endDocument(self):
-    pass
+  def startElement(self,name,attrs):
+    PathHandler.startElement(self,name,attrs)
 
-  def startElement(self, name, attrs):
     if name == 'us-patent-grant':
       self.patnum = ''
       self.grant_date = ''
       self.file_date = ''
       self.class_str = ''
-      self.ipc_ver = ''
-      self.ipc_code = ''
-      self.orgname = ''
-    elif name == 'publication-reference':
-      self.in_pubref = True
-    elif name == 'application-reference':
-      self.in_appref = True
-    elif name == 'field-of-search':
-      self.in_fos = True
-    elif name == 'doc-number':
-      if self.in_pubref:
-        self.in_patnum = True
-    elif name == 'classification-national':
-      if not self.in_fos:
-        self.in_classnat = True
-    elif name == 'main-classification':
-      if self.in_classnat:
-        self.in_mainclass = True
-    elif name == 'classification-ipcr':
-      self.in_ipc = True
-      self.ipc_ver = ''
-      self.ipc_code = ''
-    elif name == 'ipc-version-indicator':
-      if self.in_ipc:
-        self.in_ipc_version = True
-    elif name == 'section':
-      if self.in_ipc:
-        self.in_ipc_section = True
-    elif name == 'class':
-      if self.in_ipc:
-        self.in_ipc_class = True
-    elif name == 'subclass':
-      if self.in_ipc:
-        self.in_ipc_subclass = True
-    elif name == 'main-group':
-      if self.in_ipc:
-        self.in_ipc_group = True
-    elif name == 'subgroup':
-      if self.in_ipc:
-        self.in_ipc_subgroup = True
-    elif name == 'date':
-      if self.in_pubref:
-        self.in_grantdate = True
-      elif self.in_appref:
-        self.in_filedate = True
-    elif name == 'assignee':
-      if self.orgname == '':
-        self.in_assignee = True
-    elif name == 'orgname':
-      if self.in_assignee:
-        self.in_orgname = True
 
-  def endElement(self, name):
+      self.orgnames = []
+      self.countries = []
+      self.ipc_vers = []
+      self.ipc_codes = []
+    elif name == 'classification-ipcr':
+      self.ipc_ver = ''
+      self.ipc_code = ''
+    elif name == 'assignee':
+      self.orgname = ''
+      self.country = ''
+
+  def endElement(self,name):
+    PathHandler.endElement(self,name)
+
     if name == 'us-patent-grant':
       if self.patnum[0] == '0':
         self.addPatent()
-    elif name == 'publication-reference':
-      self.in_pubref = False
-    elif name == 'application-reference':
-      self.in_appref = False
-    elif name == 'field-of-search':
-      self.in_fos = False
-    elif name == 'doc-number':
-      self.in_patnum = False
-    elif name == 'classification-national':
-      if not self.in_fos:
-        self.in_classnat = False
-    elif name == 'main-classification':
-      if self.in_classnat:
-        self.in_mainclass = False
     elif name == 'classification-ipcr':
-      self.in_ipc = False
-    elif name == 'ipc-version-indicator':
-      if self.in_ipc:
-        self.in_ipc_version = False
-    elif name == 'section':
-      if self.in_ipc:
-        self.in_ipc_section = False
-    elif name == 'class':
-      if self.in_ipc:
-        self.in_ipc_class = False
-    elif name == 'subclass':
-      if self.in_ipc:
-        self.in_ipc_subclass = False
-    elif name == 'main-group':
-      if self.in_ipc:
-        self.in_ipc_group = False
-    elif name == 'subgroup':
-      if self.in_ipc:
-        self.in_ipc_subgroup = False
-    elif name == 'date':
-      if self.in_grantdate:
-        self.in_grantdate = False
-      elif self.in_filedate:
-        self.in_filedate = False
+      self.ipc_vers.append(self.ipc_ver)
+      self.ipc_codes.append(self.ipc_code)
     elif name == 'assignee':
-      self.in_assignee = False
-    elif name == 'orgname':
-      self.in_orgname = False
+      self.orgnames.append(self.orgname)
+      self.countries.append(self.country)
 
-  def characters(self, content):
-    if self.in_patnum:
-      self.patnum += content
-    if self.in_grantdate:
-      self.grant_date += content
-    if self.in_filedate:
+  def characters(self,content):
+    if len(self.path) < 2:
+      return
+
+    if self.path[-2] == 'publication-reference':
+      if self.path[-1] == 'doc-number':
+        self.patnum += content
+      elif self.path[-1] == 'date':
+        self.grant_date += content
+    elif self.path[-2] == 'application-reference' and self.path[-1] == 'date':
       self.file_date += content
-    if self.in_mainclass:
+    elif self.path[-2] == 'classification-national' and self.path[-1] == 'main-classification':
       self.class_str += content
-    if self.in_orgname:
-      self.orgname += content
-    if self.in_ipc:
-      if self.in_ipc_version:
-        self.ipc_ver += content
-      elif self.in_ipc_section or self.in_ipc_class or self.in_ipc_subclass or self.in_ipc_group:
+    elif self.path[-2] == 'assignee':
+      if self.path[-1] == 'orgname':
+        self.orgname += content
+      elif self.path[-1] == 'country':
+        self.country += content
+    elif self.path[-2] == 'classification-ipcr':
+      if self.path[-1] in ['section','class','subclass']:
         self.ipc_code += content
-      elif self.in_ipc_subgroup:
+      elif self.path[-1] == 'subgroup':
         self.ipc_code += '/' + content
+
+    if len(self.path) < 3:
+      return
+
+    if self.path[-3] == 'classification-ipcr':
+      if self.path[-2] == 'ipc-version-indicator' and self.path[-1] == 'date':
+        self.ipc_ver += content
 
   def addPatent(self):
     self.completed += 1
 
     self.patint = self.patnum[1:]
     self.class_one = self.class_str[:3]
-    self.class_two = self.class_str[3:6]
-    self.ipc_ver = self.ipc_ver.strip()
-    self.orgname_esc = self.orgname.encode('ascii','ignore').upper()
+    self.class_two = self.class_str[3:6].strip()
+    self.ipc_ver = self.ipc_vers[0] if self.ipc_vers else ''
+    self.ipc_code = self.ipc_codes[0] if self.ipc_codes else ''
+    self.orgname = self.orgnames[0].encode('ascii','ignore').upper() if self.orgnames else ''
+    self.country = self.countries[0] if self.countries else ''
 
-    if not store_db: print '{:7} {} {} {:.3} {:.3} {:.8} {:9.9} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc)
+    if not store_db: print '{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:2} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_code,len(self.ipc_codes),self.country,self.orgname)
 
-    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc))
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname))
     if len(patents) == batch_size:
       commitBatch()
 
@@ -221,5 +145,3 @@ if store_db:
   conn.close()
 
 print grant_handler.completed
-
-
