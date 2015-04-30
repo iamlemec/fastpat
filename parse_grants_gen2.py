@@ -102,8 +102,8 @@ class GrantHandler(PathHandler):
     self.patint = self.patnum[1:]
     self.ipc_ver = 'GEN2'
     self.ipc_code = self.ipc_code[:4] + self.ipc_code[5:7].strip() + '/' + self.ipc_code[7:].strip()
-    self.class_one = self.class_str[:3]
-    self.class_two = self.class_str[3:6]
+    self.class_one = self.class_str[:3].strip()
+    self.class_two = self.class_str[3:6].strip()
     self.country = self.country if self.country else 'US'
     self.orgname_esc = self.orgname.replace('&amp;','&').encode('ascii','ignore').upper()
 

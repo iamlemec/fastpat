@@ -83,8 +83,10 @@ class GrantHandler:
     self.completed += 1
 
     self.patint = self.patnum[1:8]
-    self.class_one = self.class_str[:3]
-    self.class_two = self.class_str[3:6]
+    self.file_date = self.file_date.strip()
+    self.grant_date = self.grant_date.strip()
+    self.class_one = self.class_str[:3].strip()
+    self.class_two = self.class_str[3:6].strip()
     self.ipc_ver = 'GEN1'
     self.ipc_code = self.ipc_str[:4] + self.ipc_str[4:7].strip() + '/' + self.ipc_str[7:].strip()
     self.country = self.country[:2] if self.country else 'US'

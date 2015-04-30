@@ -116,7 +116,7 @@ class GrantHandler(PathHandler):
 
     self.patint = self.patnum[1:]
 
-    self.class_one = self.class_str[:3]
+    self.class_one = self.class_str[:3].strip()
     self.class_two = self.class_str[3:6].strip()
 
     self.ipc_ver = self.ipc_vers[0] if self.ipc_vers else ''
