@@ -1,8 +1,9 @@
 #!/usr/bin/python
 
-from xml.sax import xmlreader, handler, make_parser, SAXException
 import sys
 import sqlite3
+from xml.sax import make_parser, xmlreader
+from parse_grants_common import PathHandler
 
 # handle arguments
 if len(sys.argv) <= 1:
@@ -21,7 +22,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, country text, owner text)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -31,7 +32,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
 # XML codes gen2
@@ -42,128 +43,73 @@ def commitBatch():
 # B521 - classification section (PDAT)
 # B731 - original assignee name section (name: NAM->PDAT, country: CTRY->PDAT)
 
-# SAX hanlder for gen2 patent grants
-class GrantHandler(handler.ContentHandler):
+# SAX hanlder for gen3 patent grants
+class GrantHandler(PathHandler):
   def __init__(self):
-    pass
-
-  def startDocument(self):
-    self.in_patnum_sec = False
-    self.in_patnum = False
-    self.in_grantdate = False
-    self.in_grantdate_sec = False
-    self.in_filedate = False
-    self.in_filedate_sec = False
-    self.in_ipc = False
-    self.in_ipc_sec = False
-    self.in_class = False
-    self.in_class_sec = False
-    self.in_orgname = False
-    self.in_orgname_sec = False
-    self.in_orgname_sec2 = False
+    track_keys = ['PATDOC','B110','B140','B220','B511','B521','B731','PDAT','NAM','CTRY']
+    start_keys = ['PATDOC']
+    end_keys = ['PATDOC']
+    PathHandler.__init__(self,track_keys=track_keys,start_keys=start_keys,end_keys=end_keys)
 
     self.completed = 0
 
-  def endDocument(self):
-    pass
+  def startElement(self,name,attrs):
+    PathHandler.startElement(self,name,attrs)
 
-  def startElement(self, name, attrs):
     if name == 'PATDOC':
       self.patnum = ''
       self.grant_date = ''
       self.file_date = ''
-      self.ipc_str = ''
+      self.ipc_code = ''
       self.class_str = ''
+      self.country = ''
       self.orgname = ''
-    elif name == 'B110':
-      self.in_patnum_sec = True
-    elif name == 'B140':
-      self.in_grantdate_sec = True
-    elif name == 'B220':
-      self.in_filedate_sec = True
-    elif name == 'B511':
-      self.in_ipc_sec = True
-    elif name == 'B521':
-      self.in_class_sec = True
-    elif name == 'B731':
-      self.in_orgname_sec = True
-    elif name == 'NAM':
-      if self.in_orgname_sec:
-        self.in_orgname_sec2 = True
-    elif name == 'PDAT':
-      if self.in_patnum_sec:
-        self.in_patnum = True
-      elif self.in_grantdate_sec:
-        self.in_grantdate = True
-      elif self.in_filedate_sec:
-        self.in_filedate = True
-      elif self.in_ipc_sec:
-        self.in_ipc = True
-      elif self.in_class_sec:
-        self.in_class = True
-      elif self.in_orgname_sec2:
-        if self.orgname == '':
-          self.in_orgname = True
 
-  def endElement(self, name):
+  def endElement(self,name):
+    PathHandler.endElement(self,name)
+
     if name == 'PATDOC':
       if self.patnum[0] == '0':
         self.addPatent()
-    elif name == 'B110':
-      self.in_patnum_sec = False
-    elif name == 'B140':
-      self.in_grantdate_sec = False
-    elif name == 'B220':
-      self.in_filedate_sec = False
-    elif name == 'B511':
-      self.in_ipc_sec = False
-    elif name == 'B521':
-      self.in_class_sec = False
-    elif name == 'B731':
-      self.in_orgname_sec = False
-    elif name == 'NAM':
-      self.in_orgname_sec2 = False
-    elif name == 'PDAT':
-      if self.in_patnum:
-        self.in_patnum = False
-      elif self.in_grantdate:
-        self.in_grantdate = False
-      elif self.in_filedate:
-        self.in_filedate = False
-      elif self.in_ipc:
-        self.in_ipc = False
-      elif self.in_class:
-        self.in_class = False
-      elif self.in_orgname:
-        self.in_orgname = False
 
-  def characters(self, content):
-    if self.in_patnum:
-      self.patnum += content
-    elif self.in_grantdate:
-      self.grant_date += content
-    elif self.in_filedate:
+  def characters(self,content):
+    if len(self.path) < 2:
+      return
+
+    if self.path[-2] == 'B110' and self.path[-1] == 'PDAT':
+        self.patnum += content
+    elif self.path[-2] == 'B140' and self.path[-1] == 'PDAT':
+        self.grant_date += content
+    elif self.path[-2] == 'B220' and self.path[-1] == 'PDAT':
       self.file_date += content
-    elif self.in_ipc:
-      self.ipc_str = content
-    elif self.in_class:
+    elif self.path[-2] == 'B511' and self.path[-1] == 'PDAT':
+        self.ipc_code += content      
+    elif self.path[-2] == 'B521' and self.path[-1] == 'PDAT':
       self.class_str += content
-    elif self.in_orgname:
-      self.orgname += content
+
+    if len(self.path) < 3:
+      return
+
+    if self.path[-3] == 'B731':
+      if self.path[-2] == 'NAM' and self.path[-1] == 'PDAT':
+        self.orgname += content
+      elif self.path[-2] == 'CTRY' and self.path[-1] == 'PDAT':
+        self.country += content
 
   def addPatent(self):
     self.completed += 1
 
     self.patint = self.patnum[1:]
     self.ipc_ver = 'GEN2'
-    self.ipc_code = self.ipc_str[:4] + self.ipc_str[5:7].strip() + '/' + self.ipc_str[7:].strip()
+    self.ipc_code = self.ipc_code[:4] + self.ipc_code[5:7].strip() + '/' + self.ipc_code[7:].strip()
     self.class_one = self.class_str[:3]
     self.class_two = self.class_str[3:6]
+    self.country = self.country if self.country else 'US'
     self.orgname_esc = self.orgname.replace('&amp;','&').encode('ascii','ignore').upper()
 
-    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:12.12} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:4} {:10} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc)
 
-    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname_esc))
+    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc))
     if len(patents) == batch_size:
       commitBatch()
 

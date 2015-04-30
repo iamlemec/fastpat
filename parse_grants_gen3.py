@@ -22,7 +22,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, country text, owner text)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -32,7 +32,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
 # SAX hanlder for gen3 patent grants
@@ -115,16 +115,25 @@ class GrantHandler(PathHandler):
     self.completed += 1
 
     self.patint = self.patnum[1:]
+
     self.class_one = self.class_str[:3]
     self.class_two = self.class_str[3:6].strip()
+
     self.ipc_ver = self.ipc_vers[0] if self.ipc_vers else ''
-    self.ipc_code = self.ipc_codes[0] if self.ipc_codes else ''
-    self.orgname = self.orgnames[0].encode('ascii','ignore').upper() if self.orgnames else ''
-    self.country = self.countries[0] if self.countries else ''
+    self.ipc_code = ','.join(self.ipc_codes)
 
-    if not store_db: print '{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:2} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_code,len(self.ipc_codes),self.country,self.orgname)
+    us_orgs = filter(lambda (i,s): s == 'US',enumerate(self.countries))
+    if us_orgs:
+      self.orgname = self.orgnames[us_orgs[0][0]]
+      self.country = 'US'
+    else:
+      self.orgname = self.orgnames[0] if self.orgnames else ''
+      self.country = self.countries[0] if self.countries else ''
+    self.orgname = self.orgname.encode('ascii','ignore').upper()
 
-    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.orgname))
+    if not store_db: print '{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_codes[0],len(self.ipc_codes),self.country,self.orgname)
+
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname))
     if len(patents) == batch_size:
       commitBatch()
 
