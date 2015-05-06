@@ -54,6 +54,7 @@ class GrantHandler:
       self.file_date = ''
       self.grant_date = ''
       self.country = ''
+      self.city = ''
       self.orgname = ''
       self.class_one = ''
       self.class_two = ''
@@ -69,6 +70,9 @@ class GrantHandler:
     elif name == 'CNT':
       if self.section == 'ASSG':
         self.country = text
+    elif name == 'CTY':
+      if self.section == 'ASSG':
+        self.city = text
     elif name == 'NAM':
       if self.section == 'ASSG':
         self.orgname = text
@@ -90,9 +94,10 @@ class GrantHandler:
     self.ipc_ver = 'GEN1'
     self.ipc_code = self.ipc_str[:4] + self.ipc_str[4:7].strip() + '/' + self.ipc_str[7:].strip()
     self.country = self.country[:2] if self.country else 'US'
+    self.city = self.city.upper()
     self.orgname_esc = self.orgname.decode('utf-8','replace').upper()
 
-    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:3} {:12.12} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:3} {:12.12} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
 
     patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc))
     if len(patents) == batch_size:
