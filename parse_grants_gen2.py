@@ -35,6 +35,9 @@ def commitBatch():
     cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
+def forceUpper(s):
+  return s.encode('ascii','ignore').upper()
+
 # XML codes gen2
 # B110 - patent number section (PDAT)
 # B140 - grant date section (PDAT)
@@ -108,7 +111,9 @@ class GrantHandler(PathHandler):
     self.class_one = self.class_str[:3].strip()
     self.class_two = self.class_str[3:6].strip()
     self.country = self.country if self.country else 'US'
-    self.orgname_esc = self.orgname.replace('&amp;','&').encode('ascii','ignore').upper()
+
+    self.city = forceUpper(self.city)
+    self.orgname_esc = forceUpper(self.orgname.replace('&amp;','&'))
 
     if not store_db: print '{:.8} {} {} {:3} {:3} {:4} {:10} {:10} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
 
