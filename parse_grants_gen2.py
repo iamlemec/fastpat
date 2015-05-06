@@ -115,7 +115,7 @@ class GrantHandler(PathHandler):
     self.city = forceUpper(self.city)
     self.orgname_esc = forceUpper(self.orgname.replace('&amp;','&'))
 
-    if not store_db: print '{:.8} {} {} {:3} {:3} {:4} {:10} {:10} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:3} {:3} {:4} {:10} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
 
     patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc))
     if len(patents) == batch_size:
