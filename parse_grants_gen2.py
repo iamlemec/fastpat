@@ -46,7 +46,7 @@ def commitBatch():
 # SAX hanlder for gen3 patent grants
 class GrantHandler(PathHandler):
   def __init__(self):
-    track_keys = ['PATDOC','B110','B140','B220','B511','B521','B731','PDAT','NAM','CTRY']
+    track_keys = ['PATDOC','B110','B140','B220','B511','B521','B731','PDAT','NAM','CTRY','CITY']
     start_keys = ['PATDOC']
     end_keys = ['PATDOC']
     PathHandler.__init__(self,track_keys=track_keys,start_keys=start_keys,end_keys=end_keys)
@@ -110,7 +110,7 @@ class GrantHandler(PathHandler):
     self.country = self.country if self.country else 'US'
     self.orgname_esc = self.orgname.replace('&amp;','&').encode('ascii','ignore').upper()
 
-    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:4} {:10} {:10} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:3} {:3} {:4} {:10} {:10} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
 
     patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc))
     if len(patents) == batch_size:
