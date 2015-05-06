@@ -41,7 +41,7 @@ def commitBatch():
 # B220 - issue date section (PDAT)
 # B511 - international patent class (PDAT)
 # B521 - classification section (PDAT)
-# B731 - original assignee name section (name: NAM->PDAT, country: CTRY->PDAT)
+# B731 - original assignee name section (name: NAM->PDAT, country: CTRY->PDAT, city: CITY->PDAT)
 
 # SAX hanlder for gen3 patent grants
 class GrantHandler(PathHandler):
@@ -63,6 +63,7 @@ class GrantHandler(PathHandler):
       self.ipc_code = ''
       self.class_str = ''
       self.country = ''
+      self.city = ''
       self.orgname = ''
 
   def endElement(self,name):
@@ -95,6 +96,8 @@ class GrantHandler(PathHandler):
         self.orgname += content
       elif self.path[-2] == 'CTRY' and self.path[-1] == 'PDAT':
         self.country += content
+      elif self.path[-2] == 'CITY' and self.path[-1] == 'PDAT':
+        self.city += content
 
   def addPatent(self):
     self.completed += 1
@@ -107,7 +110,7 @@ class GrantHandler(PathHandler):
     self.country = self.country if self.country else 'US'
     self.orgname_esc = self.orgname.replace('&amp;','&').encode('ascii','ignore').upper()
 
-    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:4} {:10} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:4} {:10} {:10} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
 
     patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc))
     if len(patents) == batch_size:
