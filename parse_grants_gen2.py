@@ -22,7 +22,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, country text, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, city text, country text, owner text)")
   except sqlite3.OperationalError as e:
     print e
 
@@ -32,7 +32,7 @@ patents = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?)',patents)
+    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
 def forceUpper(s):
@@ -117,7 +117,7 @@ class GrantHandler(PathHandler):
 
     if not store_db: print '{:.8} {} {} {:3} {:3} {:4} {:10} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
 
-    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc))
+    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc))
     if len(patents) == batch_size:
       commitBatch()
 
