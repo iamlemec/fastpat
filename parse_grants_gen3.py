@@ -35,12 +35,15 @@ def commitBatch():
     cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
+def forceUpper(s):
+  return s.encode('ascii','ignore').upper()
+
 # SAX hanlder for gen3 patent grants
 class GrantHandler(PathHandler):
   def __init__(self):
     track_keys = ['us-patent-grant','publication-reference','application-reference','doc-number',
                  'classification-national','main-classification','classification-ipcr','ipc-version-indicator',
-                 'section','class','subclass','main-group','subgroup','date','assignee','orgname','country']
+                 'section','class','subclass','main-group','subgroup','date','assignee','orgname','country','city']
     start_keys = ['us-patent-grant','classification-ipcr','assignee']
     end_keys = ['us-patent-grant','classification-ipcr','assignee']
     PathHandler.__init__(self,track_keys=track_keys,start_keys=start_keys,end_keys=end_keys)
@@ -131,8 +134,10 @@ class GrantHandler(PathHandler):
     org_idx = us_orgs[0][0] if us_orgs else 0
     self.orgname = self.orgnames[org_idx] if self.orgnames else ''
     self.country = self.countries[org_idx] if self.countries else ''
-    sefl.city = self.cities[org_idx] if self.cities else ''
-    self.orgname = self.orgname.encode('ascii','ignore').upper()
+    self.city = self.cities[org_idx] if self.cities else ''
+
+    self.city = forceUpper(self.city)
+    self.orgname = forceUpper(self.orgname)
 
     if not store_db: print '{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_codes[0],len(self.ipc_codes),self.city,self.country,self.orgname)
 
