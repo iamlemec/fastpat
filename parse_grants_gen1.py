@@ -97,7 +97,7 @@ class GrantHandler:
     self.city = self.city.upper()
     self.orgname_esc = self.orgname.decode('utf-8','replace').upper()
 
-    if not store_db: print '{:.8} {} {} {:.3} {:.3} {:3} {:12.12} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:3} {:3} {:3} {:12.12} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
 
     patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname_esc))
     if len(patents) == batch_size:
