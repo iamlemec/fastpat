@@ -58,6 +58,7 @@ class GrantHandler(PathHandler):
 
       self.orgnames = []
       self.countries = []
+      self.cities = []
       self.ipc_vers = []
       self.ipc_codes = []
     elif name == 'classification-ipcr':
@@ -66,6 +67,7 @@ class GrantHandler(PathHandler):
     elif name == 'assignee':
       self.orgname = ''
       self.country = ''
+      self.city = ''
 
   def endElement(self,name):
     PathHandler.endElement(self,name)
@@ -79,6 +81,7 @@ class GrantHandler(PathHandler):
     elif name == 'assignee':
       self.orgnames.append(self.orgname)
       self.countries.append(self.country)
+      self.cities.append(self.city)
 
   def characters(self,content):
     if len(self.path) < 2:
@@ -98,6 +101,8 @@ class GrantHandler(PathHandler):
         self.orgname += content
       elif self.path[-1] == 'country':
         self.country += content
+      elif self.path[-1] == 'city':
+        self.city += content
     elif self.path[-2] == 'classification-ipcr':
       if self.path[-1] in ['section','class','subclass']:
         self.ipc_code += content
@@ -123,15 +128,13 @@ class GrantHandler(PathHandler):
     self.ipc_code = ','.join(self.ipc_codes)
 
     us_orgs = filter(lambda (i,s): s == 'US',enumerate(self.countries))
-    if us_orgs:
-      self.orgname = self.orgnames[us_orgs[0][0]]
-      self.country = 'US'
-    else:
-      self.orgname = self.orgnames[0] if self.orgnames else ''
-      self.country = self.countries[0] if self.countries else ''
+    org_idx = us_orgs[0][0] if us_orgs else 0
+    self.orgname = self.orgnames[org_idx] if self.orgnames else ''
+    self.country = self.countries[org_idx] if self.countries else ''
+    sefl.city = self.cities[org_idx] if self.cities else ''
     self.orgname = self.orgname.encode('ascii','ignore').upper()
 
-    if not store_db: print '{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_codes[0],len(self.ipc_codes),self.country,self.orgname)
+    if not store_db: print '{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_codes[0],len(self.ipc_codes),self.city,self.country,self.orgname)
 
     patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.country,self.orgname))
     if len(patents) == batch_size:
