@@ -27,12 +27,10 @@ punct0_re = re.compile(punct0)
 punct1_re = re.compile(punct1)
 
 # generic terms
-# states = ['DEL','DE','NY','VA','CA','PA','OH','NC','WI','MA']
-# compustat = ['PLC','CL','REDH','ADR','FD','LP','CP','TR','SP','COS','GP','OLD','NEW']
-# generics = ['THE','A','OF','AND','AN']
-# corps = ['INC','LLC','LTD','CORP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
-# dropout = states + compustat + generics + corps
-# gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
+generics = ['THE','A','OF','AND','AN']
+corps = ['INC','LLC','LTD','CORP','COMP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
+dropout = generics + corps
+gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
 
 # substitutions - essentially lower their weighting
 subsies = {
@@ -122,9 +120,8 @@ def name_standardize(name):
   name_strip = punct0_re.sub('',name_strip)
   name_strip = punct1_re.sub(' ',name_strip)
 
-  #name_strip = gener_re.sub('',name_strip)
-
   name_strip = subsies_re.sub(lambda x: subsies[x.group()],name_strip)
+  name_strip = gener_re.sub('',name_strip)
 
   return name_strip.split()
 

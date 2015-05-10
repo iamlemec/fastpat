@@ -1,4 +1,5 @@
 from collections import defaultdict
+import operator as op
 
 # k-shingles: pairs of adjacent k-length substrings (in order)
 def shingle(s, k):
@@ -267,40 +268,51 @@ import sqlite3
 from standardize import name_standardize
 
 # generate standardized names
-def generate_namestd(npat=None):
+def generate_namestd(npat=None,xcnt=4):
     con = sqlite3.connect('store/patents.db')
     cur = con.cursor()
 
     cur.execute('drop table if exists patent_std')
     cur.execute('create table patent_std (patnum int, owner text)')
 
-    cmd = "select patnum,owner from patent where owner!=''"
+    cmd = "select patnum,owner,city,country from patent where owner!=''"
     if npat: cmd += " limit {}".format(npat)
 
-    for (patnum,name) in cur.execute(cmd).fetchall():
+    for (patnum,name,city,country) in cur.execute(cmd).fetchall():
         name = ' '.join(name_standardize(name))
         if name:
+            name += ' (' + city + ',' + xcnt*country + ')'
             cur.execute('insert into patent_std values (?,?)',(patnum,name))
 
     con.commit()
     con.close()
 
-def firm_buckets(npat=None,kshingle=2,**kwargs):
+def firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
     con = sqlite3.connect('store/patents.db')
     cur = con.cursor()
 
     c = Cluster(**kwargs)
 
-    cmd = "select patnum,owner from patent_std"
-    if npat: cmd += " limit {}".format(npat)
+    cmd = 'select patnum,owner from patent_std'
+    if reverse:
+        cmd += ' order by rowid desc'
+    if npat:
+        cmd += ' limit {}'.format(npat)
 
     name_dict = {}
     for (patnum,name) in cur.execute(cmd):
-        name = ' '.join(name_standardize(name))
-        if not name: continue
         name_dict[patnum] = name
         c.add(frozenset(shingle(name,kshingle)),label=patnum)
 
     con.close()
 
-    return [[name_dict[pn] for pn in grp] for grp in c.groups()]
+    groups = [[name_dict[pn] for pn in grp] for grp in c.groups()]
+    if info:
+        sgroups = sorted(groups,key=len,reverse=True)
+        gnames = map(op.itemgetter(0),sgroups)
+        glens = map(len,sgroups)
+        gnamelens = zip(gnames,glens)
+        return (sgroups,gnamelens)
+    else:
+        return groups
+
