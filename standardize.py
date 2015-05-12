@@ -4,6 +4,10 @@ import re
 import collections
 import itertools
 
+# postscripts
+post0 = r"(\bA CORP.|;|,).*$"
+post0_re = re.compile(post0)
+
 # acronyms
 acronym1 = r"\b(\w) (\w) (\w)\b"
 acronym1_re = re.compile(acronym1)
@@ -27,88 +31,19 @@ punct0_re = re.compile(punct0)
 punct1_re = re.compile(punct1)
 
 # generic terms
+states = ['DEL','DE','NY','VA','CA','PA','OH','NC','WI','MA']
+compustat = ['PLC','CL','REDH','ADR','FD','LP','CP','TR','SP','COS','GP','OLD','NEW']
 generics = ['THE','A','OF','AND','AN']
-corps = ['INC','LLC','LTD','CORP','COMP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
-dropout = generics + corps
+corps = ['CORPORATION','INCORPORATED','COMPANY','LIMITED','KABUSHIKI','KAISHA','AKTIENGESELLSCHAFT','AKTIEBOLAG','INC','LLC','LTD','CORP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE']
+typos = ['CORPORATIN','CORPORATON']
+variants = ['TRUST','GROUP','GRP','HLDGS','HOLDINGS','COMM','INDS','COMM','HLDG','TECH','INTERNATIONAL']
+dropout = states + compustat + generics + corps + typos + variants
 gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
-
-# substitutions - essentially lower their weighting
-subsies = {
-  'CORPORATION': 'CORP',
-  'INCORPORATED': 'INC',
-  'COMPANY': 'COMP',
-  'LIMITED': 'LTD',
-  'KABUSHIKI KAISHA': 'KK',
-  'AKTIENGESELLSCHAFT': 'AG',
-  'AKTIEBOLAG': 'AB',
-  'TECHNOLOGIES': 'TECH',
-  'TECHNOLOGY': 'TECH',
-  'MANUFACTURING': 'MANUF',
-  'SEMICONDUCTORS': 'SEMI',
-  'SEMICONDUCTOR': 'SEMI',
-  'RESEARCH': 'RES',
-  'COMMUNICATIONS': 'COMM',
-  'COMMUNICATION': 'COMM',
-  'SYSTEMS': 'SYS',
-  'PHARMACEUTICALS': 'PHARMA',
-  'PHARMACEUTICAL': 'PHARMA',
-  'ELECTRONICS': 'ELEC',
-  'INTERNATIONAL': 'INTL',
-  'INDUSTRIES': 'INDS',
-  'INDUSTRY': 'INDS',
-  'CHEMICALS': 'CHEM',
-  'CHEMICAL': 'CHEM',
-  'LABORATORIES': 'LABS',
-  'LABORATORY': 'LABS',
-  'PRODUCTS': 'PROD',
-  'ENGINEERING': 'ENG',
-  'RESEARCH': 'RES',
-  'DEVELOPMENT': 'DEV',
-  'REPRESENTED': 'REPR',
-  'SECRETARY': 'SECR',
-  'PRODUCTS': 'PROD',
-  'INDUSTRIAL': 'IND',
-  'ASSOCIATES': 'ASSOC',
-  'INSTRUMENTS': 'INSTR',
-  'NATIONAL': 'NATL',
-  'STANDARD': 'STD',
-  'ORGANIZATION': 'ORG',
-  'EQUIPMENT': 'EQUIP',
-  'GESELLSCHAFT': 'GS',
-  'INSTITUTE': 'INST',
-  'MASCHINENFABRIK': 'MF',
-  'AKTIEBOLAGET': 'AB',
-  'SEISAKUSHO': 'SSS',
-  'COMPAGNIE': 'COMP',
-  'NATIONALE': 'NATL',
-  'FOUNDATION': 'FOUND',
-  'CONTINENTAL': 'CONTL',
-  'INTERCONTINENTAL': 'INTER',
-  'INDUSTRIE': 'IND',
-  'INDUSTRIELLE': 'IND',
-  'ELECTRICAL': 'ELEC',
-  'ELECTRIC': 'ELEC',
-  'UNIVERSITY': 'UNIV',
-  'MICROSYSTEMS': 'MICRO',
-  'MICROELECTRONICS': 'MICRO',
-  'TELECOMMUNICATIONS': 'TELE',
-  'HOLDINGS': 'HLDG',
-  'MASSACHUSSETTES': 'MASS',
-  'MINNESOTA': 'MINN',
-  'MANAGEMENT': 'MGMT',
-  'DEPARTMENT': 'DEP',
-  'ADMINISTRATOR': 'ADMIN',
-  'KOMMANDITGESELLSCHAFT': 'KG',
-  'INNOVATIONS': 'INNOV',
-  'INNOVATION': 'INNOV',
-  'ENTERTAINMENT': 'ENTER'
-}
-subsies_re = re.compile(r'\b(' + '|'.join(subsies.keys()) + r')\b')
 
 # standardize a firm name
 def name_standardize(name):
   name_strip = name
-
+  name_strip = post0_re.sub('',name_strip)
   name_strip = acronym1_re.sub(r"\1\2\3",name_strip)
   name_strip = acronym2_re.sub(r"\1\2",name_strip)
   name_strip = acronym3_re.sub(r"\1\2\3",name_strip)
@@ -116,14 +51,12 @@ def name_standardize(name):
   name_strip = acronym5_re.sub(r"\1\2",name_strip)
   name_strip = acronym6_re.sub(r"\1\2",name_strip)
   name_strip = acronym7_re.sub(r"\1\2",name_strip)
-
   name_strip = punct0_re.sub('',name_strip)
   name_strip = punct1_re.sub(' ',name_strip)
-
-  name_strip = subsies_re.sub(lambda x: subsies[x.group()],name_strip)
   name_strip = gener_re.sub('',name_strip)
+  name_toks = name_strip.split()
+  return name_toks
 
-  return name_strip.split()
 
 # detect matches
 cmd_name = 'select name from firmname where gvkey=?'

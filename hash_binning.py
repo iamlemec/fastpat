@@ -1,5 +1,138 @@
+# name matching using locally sensitive hashing
+
 from collections import defaultdict
 import operator as op
+import re
+import sqlite3
+
+#
+# name standardization, separate from usual standardization
+#
+
+# acronyms
+acronym1 = r"\b(\w) (\w) (\w)\b"
+acronym1_re = re.compile(acronym1)
+acronym2 = r"\b(\w) (\w)\b"
+acronym2_re = re.compile(acronym2)
+acronym3 = r"\b(\w)-(\w)-(\w)\b"
+acronym3_re = re.compile(acronym3)
+acronym4 = r"\b(\w)-(\w)\b"
+acronym4_re = re.compile(acronym4)
+acronym5 = r"\b(\w\w)&(\w)\b"
+acronym5_re = re.compile(acronym5)
+acronym6 = r"\b(\w)&(\w)\b"
+acronym6_re = re.compile(acronym6)
+acronym7 = r"\b(\w) & (\w)\b"
+acronym7_re = re.compile(acronym7)
+
+# punctuation
+punct0 = r"'S|\(.*\)|\."
+punct1 = r"[^\w\s]"
+punct0_re = re.compile(punct0)
+punct1_re = re.compile(punct1)
+
+# generic terms
+generics = ['THE','A','OF','AND','AN']
+corps = ['INC','LLC','LTD','CORP','COMP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
+dropout = generics + corps
+gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
+
+# substitutions - essentially lower their weighting
+subsies = {
+  'CORPORATION': 'CORP',
+  'INCORPORATED': 'INC',
+  'COMPANY': 'COMP',
+  'LIMITED': 'LTD',
+  'KABUSHIKI KAISHA': 'KK',
+  'AKTIENGESELLSCHAFT': 'AG',
+  'AKTIEBOLAG': 'AB',
+  'TECHNOLOGIES': 'TECH',
+  'TECHNOLOGY': 'TECH',
+  'MANUFACTURING': 'MANUF',
+  'SEMICONDUCTORS': 'SEMI',
+  'SEMICONDUCTOR': 'SEMI',
+  'RESEARCH': 'RES',
+  'COMMUNICATIONS': 'COMM',
+  'COMMUNICATION': 'COMM',
+  'SYSTEMS': 'SYS',
+  'PHARMACEUTICALS': 'PHARMA',
+  'PHARMACEUTICAL': 'PHARMA',
+  'ELECTRONICS': 'ELEC',
+  'INTERNATIONAL': 'INTL',
+  'INDUSTRIES': 'INDS',
+  'INDUSTRY': 'INDS',
+  'CHEMICALS': 'CHEM',
+  'CHEMICAL': 'CHEM',
+  'LABORATORIES': 'LABS',
+  'LABORATORY': 'LABS',
+  'PRODUCTS': 'PROD',
+  'ENGINEERING': 'ENG',
+  'RESEARCH': 'RES',
+  'DEVELOPMENT': 'DEV',
+  'REPRESENTED': 'REPR',
+  'SECRETARY': 'SECR',
+  'PRODUCTS': 'PROD',
+  'INDUSTRIAL': 'IND',
+  'ASSOCIATES': 'ASSOC',
+  'INSTRUMENTS': 'INSTR',
+  'NATIONAL': 'NATL',
+  'STANDARD': 'STD',
+  'ORGANIZATION': 'ORG',
+  'EQUIPMENT': 'EQUIP',
+  'GESELLSCHAFT': 'GS',
+  'INSTITUTE': 'INST',
+  'MASCHINENFABRIK': 'MF',
+  'AKTIEBOLAGET': 'AB',
+  'SEISAKUSHO': 'SSS',
+  'COMPAGNIE': 'COMP',
+  'NATIONALE': 'NATL',
+  'FOUNDATION': 'FOUND',
+  'CONTINENTAL': 'CONTL',
+  'INTERCONTINENTAL': 'INTER',
+  'INDUSTRIE': 'IND',
+  'INDUSTRIELLE': 'IND',
+  'ELECTRICAL': 'ELEC',
+  'ELECTRIC': 'ELEC',
+  'UNIVERSITY': 'UNIV',
+  'MICROSYSTEMS': 'MICRO',
+  'MICROELECTRONICS': 'MICRO',
+  'TELECOMMUNICATIONS': 'TELE',
+  'HOLDINGS': 'HLDG',
+  'MASSACHUSSETTES': 'MASS',
+  'MINNESOTA': 'MINN',
+  'MANAGEMENT': 'MGMT',
+  'DEPARTMENT': 'DEP',
+  'ADMINISTRATOR': 'ADMIN',
+  'KOMMANDITGESELLSCHAFT': 'KG',
+  'INNOVATIONS': 'INNOV',
+  'INNOVATION': 'INNOV',
+  'ENTERTAINMENT': 'ENTER'
+}
+subsies_re = re.compile(r'\b(' + '|'.join(subsies.keys()) + r')\b')
+
+# standardize a firm name
+def name_standardize(name):
+  name_strip = name
+
+  name_strip = acronym1_re.sub(r"\1\2\3",name_strip)
+  name_strip = acronym2_re.sub(r"\1\2",name_strip)
+  name_strip = acronym3_re.sub(r"\1\2\3",name_strip)
+  name_strip = acronym4_re.sub(r"\1\2",name_strip)
+  name_strip = acronym5_re.sub(r"\1\2",name_strip)
+  name_strip = acronym6_re.sub(r"\1\2",name_strip)
+  name_strip = acronym7_re.sub(r"\1\2",name_strip)
+
+  name_strip = punct0_re.sub('',name_strip)
+  name_strip = punct1_re.sub(' ',name_strip)
+
+  name_strip = subsies_re.sub(lambda x: subsies[x.group()],name_strip)
+  name_strip = gener_re.sub('',name_strip)
+
+  return name_strip.split()
+
+#
+# locally sensitive hashing code
+#
 
 # k-shingles: pairs of adjacent k-length substrings (in order)
 def shingle(s, k):
@@ -251,6 +384,10 @@ class Cluster:
         
         return matches
 
+#
+# hash binning implementation
+#
+
 # trick is to implement hashmaps in sql
 # Looping over patent assignees f:
 #  1. Find sig and LSH: table(f_id,hash_1,...,hash_n) where n is n_bands
@@ -263,9 +400,6 @@ class Cluster:
 
 # Now when doing firm match, run matching code within each bucket separately
 # then merge at the end. Speed gain is quadratic in number of buckets.
-
-import sqlite3
-from standardize import name_standardize
 
 # generate standardized names
 def generate_namestd(npat=None,xcnt=4):
@@ -315,4 +449,3 @@ def firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
         return (sgroups,gnamelens)
     else:
         return groups
-
