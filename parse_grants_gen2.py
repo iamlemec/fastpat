@@ -65,9 +65,13 @@ class GrantHandler(PathHandler):
       self.file_date = ''
       self.ipc_code = ''
       self.class_str = ''
+      self.orgnames = []
+      self.countries = []
+      self.cities = []
+    elif name == 'B731':
+      self.orgname = ''
       self.country = ''
       self.city = ''
-      self.orgname = ''
 
   def endElement(self,name):
     PathHandler.endElement(self,name)
@@ -75,6 +79,10 @@ class GrantHandler(PathHandler):
     if name == 'PATDOC':
       if self.patnum[0] == '0':
         self.addPatent()
+    elif name == 'B731':
+      self.orgnames.append(self.orgname)
+      self.countries.append(self.country)
+      self.cities.append(self.city)
 
   def characters(self,content):
     if len(self.path) < 2:
@@ -110,14 +118,17 @@ class GrantHandler(PathHandler):
     self.ipc_code = self.ipc_code[:4] + self.ipc_code[5:7].strip() + '/' + self.ipc_code[7:].strip()
     self.class_one = self.class_str[:3].strip()
     self.class_two = self.class_str[3:6].strip()
-    self.country = self.country if self.country else 'US'
+
+    self.orgname = self.orgnames[0] if self.orgnames else ''
+    self.country = self.countries[0] if self.countries else ''
+    self.city = self.cities[0] if self.cities else ''
 
     self.city = forceUpper(self.city)
-    self.orgname_esc = forceUpper(self.orgname.replace('&amp;','&'))
+    self.orgname = forceUpper(self.orgname.replace('&amp;','&'))
 
-    if not store_db: print '{:.8} {} {} {:3} {:3} {:4} {:10} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
+    if not store_db: print '{:.8} {} {} {:3} {:3} {:4} {:10} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname)
 
-    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc))
+    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname))
     if len(patents) == batch_size:
       commitBatch()
 

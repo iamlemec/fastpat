@@ -1,7 +1,11 @@
+# Created by Liang Sun in 2013
+# Modified by Doug Hanley 2015
+
 # name matching using locally sensitive hashing
 
 from itertools import chain
 from collections import defaultdict
+from hashlib import md5
 import operator as op
 import re
 import sqlite3
@@ -148,136 +152,15 @@ def city_standardize(city):
 # locally sensitive hashing code
 #
 
+def hashfunc(x):
+    return int(md5(x).hexdigest(),16)
+
 # k-shingles: pairs of adjacent k-length substrings (in order)
 def shingle(s, k=2):
     """Generate k-length shingles of string s."""
     k = min(len(s), k)
     for i in range(len(s) - k + 1):
         yield s[i:i+k]
-
-# map str'able x into min_i(hash(salt+j+x[i]+salt)) for j=1,...,dim
-# this result is called a signature (sig) of length dim
-class MinHashSignature:
-    """Hash signatures for sets/tuples using minhash."""
-
-    def __init__(self, dim):
-        """
-        Define the dimension of the hash pool
-        (number of hash functions).
-        """
-        self.dim = dim
-        self.hashes = self.hash_functions()
-
-    def hash_functions(self):
-        """Return dim different hash functions."""
-        def hash_factory(n):
-            return lambda x: hash("salt" + str(n) + str(x) + "salt")
-        
-        return [ hash_factory(_) for _ in range(self.dim) ]
-
-    def sign(self, item, weights=None):
-        """Return the minhash signatures for the `item`."""
-        sig = [ float("inf") ] * self.dim
-        
-        for hash_ix, hash_fn in enumerate(self.hashes):
-            # minhashing; requires item is iterable:
-            sig[hash_ix] = min(hash_fn(i) for i in item)
-        
-        return sig
-
-class WeightedMinHashSignature:
-    """Hash signatures for sets/tuples using minhash."""
-
-    def __init__(self, dim):
-        """
-        Define the dimension of the hash pool
-        (number of hash functions).
-        """
-        self.dim = dim
-        self.hashes = self.hash_functions()
-
-    def hash_functions(self):
-        """Return dim different hash functions."""
-        def hash_factory(n):
-            return lambda x: hash("salt" + str(n) + str(x) + "salt")
-        
-        return [ hash_factory(_) for _ in range(self.dim) ]
-
-    def sign(self, item, weights):
-        """Return the minhash signatures for the `item`."""
-        sig = [ float("inf") ] * self.dim
-        itemX = list(chain([i+str(j) for j in xrange(w)] for (i,w) in zip(item,weights)))
-        
-        for hash_ix, hash_fn in enumerate(self.hashes):
-            # minhashing; requires item is iterable:
-            sig[hash_ix] = min(hash_fn(i) for i in itemX)
-        
-        return sig
-
-# this partitions a signature into bands of length bandwidth
-# and hashes each of these bands, returning this as an iterator
-# of length n_bands
-class LSH:
-    """
-    Locality sensitive hashing.
-    
-    Uses a banding approach to hash
-    similar signatures to the same buckets.
-    """
-    
-    def __init__(self, size, threshold):
-        """
-        LSH approximating a given similarity `threshold`
-        with a given hash signature `size`.
-        """
-        self.size = size
-        self.threshold = threshold
-        self.bandwidth = self.get_bandwidth(size, threshold)
-
-    @staticmethod
-    def get_bandwidth(n, t):
-        """
-        Approximate the bandwidth (number of rows in each band)
-        needed to get threshold.
-
-        Threshold t = (1/b) ** (1/r)
-        where
-        b = # of bands
-        r = # of rows per band
-        n = b * r = size of signature
-        """
-        best = n # 1
-        minerr = float("inf")
-        
-        for r in range(1, n + 1):
-            try:
-                b = 1. / (t ** r)
-            except: # Divide by zero, your signature is huge
-                return best
-            
-            err = abs(n - b * r)
-            
-            if err < minerr:
-                best = r
-                minerr = err
-                
-        return best
-
-    def hash(self, sig):
-        """Generate hash values for this signature."""
-        for band in zip(*(iter(sig),) * self.bandwidth):
-            yield hash("salt" + str(band) + "tlas")
-
-    @property
-    def exact_threshold(self):
-        """The exact threshold defined by the chosen bandwith."""
-        r = self.bandwidth
-        b = self.size / r
-        return (1. / b) ** (1. / r)
-
-    def get_n_bands(self):
-        """The number of bands."""
-        return int(self.size / self.bandwidth)
 
 class UnionFind:
     """
@@ -350,43 +233,23 @@ class UnionFind:
             ret[self[k]].append(k)
         return ret
 
-# hashmaps - list of n_bands dictionaries, each of which maps from 
-# LSH values to lists of items
-#
-# match - a match occurs when the LSH hash value matches in any of 
-# bands
-class Cluster:
-    """
-    Cluster items with a Jaccard similarity above
-    some `threshold` with a high probability.
-
-    Based on Rajaraman, "Mining of Massive Datasets":
-    
-    1. Generate items hash signatures
-    2. Use LSH to map similar signatures to same buckets
-    3. Use UnionFind to merge buckets containing same values
-    """
-    
-    def __init__(self, threshold=0.5, size=10, Signer=WeightedMinHashSignature):
+class SimhashIndex:
+    # dim is the simhash width, k is the tolerance
+    def __init__(self, dim=64, k=2):
         """
-        The `size` parameter controls the number of hash
-        functions ("signature size") to create.
         """
-        self.size = size
+        self.k = k
+        self.dim = dim
         self.unions = UnionFind()
-        self.signer = Signer(size)
-        self.hasher = LSH(size, threshold)
-        self.hashmaps = [
-            defaultdict(list) for _ in range(self.hasher.get_n_bands())
-        ]
+        self.hashmaps = [defaultdict(list) for _ in range(k+1)]
 
+        self.masks = [1 << i for i in range(dim)]
+
+        self.offsets = [self.dim // (self.k + 1) * i for i in range(self.k + 1)]
+        self.bin_masks = [(i == len(self.offsets) - 1 and 2 ** (self.dim - offset) - 1 or 2 ** (self.offsets[i+1]-offset) - 1) for (i,offset) in enumerate(self.offsets)]
+
+    # add item to the cluster
     def add(self, item, weights=None, label=None):
-        """
-        Add an `item` to the cluster.
-        
-        Optionally, use a `label` to reference this `item`.
-        Otherwise, the `item` itself is used as the label.
-        """
         # Ensure label for this item
         if label is None:
             label = item
@@ -394,61 +257,58 @@ class Cluster:
         # Add to unionfind structure
         self.unions[label]
 
-        # Get item signature
-        sig = self.signer.sign(item,weights)
+        # get simhash signature
+        simhash = self.sign(item,weights)
 
-        # Unite labels with the same LSH keys in the same band
-        for band_idx, hashval in enumerate(self.hasher.hash(sig)):
-            self.hashmaps[band_idx][hashval].append(label)
-            self.unions.union(label, self.hashmaps[band_idx][hashval][0])
+        # Unite labels with the same keys in the same band
+        for idx, key in enumerate(self.get_keys(simhash)):
+            self.hashmaps[idx][key].append(label)
+            self.unions.union(label,self.hashmaps[idx][key][0])
 
+    # get the clustering result
     def groups(self):
-        """
-        Get the clustering result.
-        
-        Returns sets of labels.
-        """
         return self.unions.sets()
 
+    # get a set of matching labels for item
     def match(self, item):
-        """
-        Get a set of matching labels for `item`.
-        
-        Returns a (possibly empty) set of labels.
-        """
         # Get signature
-        sig = self.signer.sign(item)
+        simhash = self.sign(item)
         
         matches = set()
         
-        for band_idx, hashval in enumerate(self.hasher.hash(sig)):
-            if hashval in self.hashmaps[band_idx]:
-                matches.update(self.hashmaps[band_idx][hashval])
+        for idx, key in enumerate(self.get_keys(simhash)):
+            if key in self.hashmaps[idx]:
+                matches.update(self.hashmaps[idx][key])
         
         return matches
 
-#
-# hash binning implementation
-#
+    # compute actual simhash
+    def sign(self, features, weights):
+        if weights is None:
+            weights = [1.0]*len(features)
+        hashs = map(hashfunc,features)
+        v = [0.0]*self.dim
+        for (h,w) in zip(hashs,weights):
+            for i in xrange(self.dim):
+                v[i] += w if h & self.masks[i] else -w
+        ans = 0
+        for i in xrange(self.dim):
+            if v[i] >= 0:
+                ans |= self.masks[i]
+        return ans
 
-# trick is to implement hashmaps in sql
-# Looping over patent assignees f:
-#  1. Find sig and LSH: table(f_id,hash_1,...,hash_n) where n is n_bands
-#  2. A firm is a potential match if it shares any of hash_1 through hash_n with the existing set
-#  3. If not a match, create a new bucket. If a match, add to that bucket
-# Build iteratively, this could be done in memory or not
+    # bin simhash into chunks
+    def get_keys(self, simhash):
+        for (i,(offset,mask)) in enumerate(zip(self.offsets,self.bin_masks)):
+            c = simhash >> offset & mask
+            yield '%x:%x' % (c, i)
 
-# output - table mapping from patents to buckets
-# the higher the threshhold and the lower the hash size, the larger the number of buckets
 
-# Now when doing firm match, run matching code within each bucket separately
-# then merge at the end. Speed gain is quadratic in number of buckets.
-
-def firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
+def firm_buckets(npat=None,reverse=False,nshingle=2,store=False,**kwargs):
     con = sqlite3.connect('store/patents.db')
     cur = con.cursor()
 
-    c = Cluster(**kwargs)
+    c = SimhashIndex(**kwargs)
 
     cmd = 'select patnum,owner,country from patent where owner!=\'\''
     if reverse:
@@ -461,10 +321,10 @@ def firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
     for (patnum,owner,country) in cur.execute(cmd):
         toks = name_standardize(owner)
         name = ' '.join(toks)
-        name_shings = list(shingle(name,kshingle))
+        name_shings = list(shingle(name,nshingle))
         features = name_shings + toks + [country]
-        weights = [1]*len(name_shings) + [3]*len(toks) + [5]
-        c.add(features,weights,label=patnum)
+        weights = [1.0]*len(name_shings) + [3.0]*len(toks) + [3.0]
+        c.add(features,weights=weights,label=patnum)
 
         name += ' (' + country + ')'
         name_dict[patnum] = name
@@ -472,55 +332,19 @@ def firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
         i += 1
         if i%100000 == 0: print i
 
-    con.close()
-
     groups = c.groups()
-    if info:
+    if store:
+        cur.execute('drop table if exists cluster')
+        cur.execute('create table cluster (patnum int, clusterid int)')
+
+        for (cid,(_,group)) in enumerate(c.groups().items()):
+            cur.executemany('insert into cluster values (?,?)',[(patnum,cid) for patnum in group])
+
+        con.commit()
+    else:
         (gnames,sgroups) = zip(*sorted(groups.items(),key=lambda (k,v): len(v),reverse=True))
         sgroups = map(lambda g: map(name_dict.get,g),sgroups)
         gnames = map(name_dict.get,gnames)
         glens = map(len,sgroups)
         guniq = map(lambda g: len(np.unique(g)),sgroups)
         return (sgroups,gnames,guniq,glens)
-    else:
-        return groups.values()
-
-# (sgroups,gnamelens) = hb.firm_buckets(npat=100000,kshingle=3,threshold=0.75,size=50,reverse=True,info=True)
-
-#
-# simhash version
-#
-
-# from simhash import Simhash, SimhashIndex
-
-# def simhash_firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
-#     con = sqlite3.connect('store/patents.db')
-#     cur = con.cursor()
-
-#     index = SimhashIndex({},**kwargs)
-
-#     cmd = 'select patnum,owner from patent'
-#     if reverse:
-#         cmd += ' order by rowid desc'
-#     if npat:
-#         cmd += ' limit {}'.format(npat)
-
-#     name_dict = {}
-#     for (patnum,name) in cur.execute(cmd):
-#         name = ' '.join(name_standardize(name))
-#         name_dict[patnum] = name
-#         index.add(str(patnum),Simhash(shingle(name,kshingle)))
-
-#     con.close()
-
-#     groups = [[name_dict[pn] for pn in grp] for grp in c.groups()]
-#     if info:
-#         sgroups = sorted(groups,key=len,reverse=True)
-#         gnames = map(op.itemgetter(0),sgroups)
-#         glens = map(len,sgroups)
-#         gnamelens = zip(gnames,glens)
-#         return (sgroups,gnamelens)
-#     else:
-#         return groups
-
-# objs = [(str(k), Simhash(get_features(v))) for k, v in data.items()]

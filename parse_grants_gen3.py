@@ -130,11 +130,9 @@ class GrantHandler(PathHandler):
     self.ipc_ver = self.ipc_vers[0] if self.ipc_vers else ''
     self.ipc_code = ','.join(self.ipc_codes)
 
-    us_orgs = filter(lambda (i,s): s == 'US',enumerate(self.countries))
-    org_idx = us_orgs[0][0] if us_orgs else 0
-    self.orgname = self.orgnames[org_idx] if self.orgnames else ''
-    self.country = self.countries[org_idx] if self.countries else ''
-    self.city = self.cities[org_idx] if self.cities else ''
+    self.orgname = self.orgnames[0] if self.orgnames else ''
+    self.country = self.countries[0] if self.countries else ''
+    self.city = self.cities[0] if self.cities else ''
 
     self.city = forceUpper(self.city)
     self.orgname = forceUpper(self.orgname)
