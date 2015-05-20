@@ -51,6 +51,7 @@ subsies = {
   'TECHNOLOGIES': 'TECH',
   'TECHNOLOGY': 'TECH',
   'MANUFACTURING': 'MANUF',
+  'MANUFACTURE': 'MANUF',
   'SEMICONDUCTORS': 'SEMI',
   'SEMICONDUCTOR': 'SEMI',
   'RESEARCH': 'RES',
@@ -108,7 +109,9 @@ subsies = {
   'KOMMANDITGESELLSCHAFT': 'KG',
   'INNOVATIONS': 'INNOV',
   'INNOVATION': 'INNOV',
-  'ENTERTAINMENT': 'ENTER'
+  'ENTERTAINMENT': 'ENTER',
+  'ENTERPRISES': 'ENTER',
+  'ENTERPRISE': 'ENTER'
 }
 subsies_re = re.compile(r"\b(" + "|".join(subsies.keys()) + r")\b")
 
@@ -225,14 +228,14 @@ class LSH:
     similar signatures to the same buckets.
     """
     
-    def __init__(self, size, threshold):
+    def __init__(self, size, thresh):
         """
         LSH approximating a given similarity `threshold`
         with a given hash signature `size`.
         """
         self.size = size
-        self.threshold = threshold
-        self.bandwidth = self.get_bandwidth(size, threshold)
+        self.thresh = thresh
+        self.bandwidth = self.get_bandwidth(size, thresh)
 
     @staticmethod
     def get_bandwidth(n, t):
@@ -367,7 +370,7 @@ class Cluster:
     3. Use UnionFind to merge buckets containing same values
     """
     
-    def __init__(self, threshold=0.5, size=10, Signer=WeightedMinHashSignature):
+    def __init__(self, thresh=0.5, size=10, Signer=WeightedMinHashSignature):
         """
         The `size` parameter controls the number of hash
         functions ("signature size") to create.
@@ -375,7 +378,7 @@ class Cluster:
         self.size = size
         self.unions = UnionFind()
         self.signer = Signer(size)
-        self.hasher = LSH(size, threshold)
+        self.hasher = LSH(size, thresh)
         self.hashmaps = [
             defaultdict(list) for _ in range(self.hasher.get_n_bands())
         ]
@@ -444,13 +447,35 @@ class Cluster:
 # Now when doing firm match, run matching code within each bucket separately
 # then merge at the end. Speed gain is quadratic in number of buckets.
 
-def firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
+def generate_names():
+    con = sqlite3.connect('store/patents.db')
+    cur = con.cursor()
+
+    cur.execute('drop table if exists patent_std')
+    cur.execute('create table patent_std (patnum int, namestd int)')
+
+    for (patnum,owner,country) in cur.execute('select patnum,owner,country from patent where owner!=\'\'').fetchall():
+        toks = name_standardize(owner)
+        namestd = ' '.join(toks) + ' (' + country + ')'
+        cur.execute('insert into patent_std values (?,?)',(patnum,namestd))
+
+    cur.execute('drop table if exists owner')
+    cur.execute('create table owner (ownerid integer primary key asc, name text)')
+    cur.execute('insert into owner(name) select distinct namestd from patent_std')
+
+    cur.execute('drop table if exists patown')
+    cur.execute('create table patown (patnum int, ownerid int)')
+    cur.execute('insert into patown select patnum,ownerid from patent_std join owner on patent_std.namestd=owner.name')
+
+    con.commit()
+
+def firm_buckets(npat=None,reverse=True,nshingle=2,store=False,**kwargs):
     con = sqlite3.connect('store/patents.db')
     cur = con.cursor()
 
     c = Cluster(**kwargs)
 
-    cmd = 'select patnum,owner,country from patent where owner!=\'\''
+    cmd = 'select ownerid,name from owner'
     if reverse:
         cmd += ' order by rowid desc'
     if npat:
@@ -458,69 +483,43 @@ def firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
 
     name_dict = {}
     i = 0
-    for (patnum,owner,country) in cur.execute(cmd):
-        toks = name_standardize(owner)
-        name = ' '.join(toks)
-        name_shings = list(shingle(name,kshingle))
-        features = name_shings + toks + [country]
-        weights = [1]*len(name_shings) + [3]*len(toks) + [5]
-        c.add(features,weights,label=patnum)
+    for (ownerid,name) in cur.execute(cmd):
+        words = name.split()
+        shings = list(shingle(name,nshingle))
+        features = shings + words
 
-        name += ' (' + country + ')'
-        name_dict[patnum] = name
+        nshings = len(shings)
+        first_toks = max(1,nshings/2)
+        nwords = len(words) - 1
+        first_words = max(1,nwords/2)
+        weights = [2]*first_toks + [1]*(nshings-first_toks) + [3]*first_words + [1]*(nwords-first_words) + [3]
+
+        c.add(features,weights=weights,label=ownerid)
+        name_dict[ownerid] = name
 
         i += 1
         if i%100000 == 0: print i
 
-    con.close()
-
     groups = c.groups()
-    if info:
+    if store:
+        cur.execute('drop table if exists cluster')
+        cur.execute('create table cluster (ownerid int, clusterid int, basepat int)')
+
+        for (cid,(base,group)) in enumerate(c.groups().iteritems()):
+            cur.executemany('insert into cluster values (?,?,?)',[(patnum,cid,base) for patnum in group])
+
+        con.commit()
+        con.close()
+    else:
+        con.close()
+        
         (gnames,sgroups) = zip(*sorted(groups.items(),key=lambda (k,v): len(v),reverse=True))
         sgroups = map(lambda g: map(name_dict.get,g),sgroups)
         gnames = map(name_dict.get,gnames)
         glens = map(len,sgroups)
-        guniq = map(lambda g: len(np.unique(g)),sgroups)
-        return (sgroups,gnames,guniq,glens)
-    else:
-        return groups.values()
+        ginfo = zip(gnames,glens)
+        return (sgroups,ginfo)
 
-# (sgroups,gnamelens) = hb.firm_buckets(npat=100000,kshingle=3,threshold=0.75,size=50,reverse=True,info=True)
+# (sgroups,gnamelens) = hb.firm_buckets(npat=100000,kshingle=3,thresh=0.75,size=50,reverse=True,info=True)
 
-#
-# simhash version
-#
-
-# from simhash import Simhash, SimhashIndex
-
-# def simhash_firm_buckets(npat=None,reverse=False,kshingle=2,info=False,**kwargs):
-#     con = sqlite3.connect('store/patents.db')
-#     cur = con.cursor()
-
-#     index = SimhashIndex({},**kwargs)
-
-#     cmd = 'select patnum,owner from patent'
-#     if reverse:
-#         cmd += ' order by rowid desc'
-#     if npat:
-#         cmd += ' limit {}'.format(npat)
-
-#     name_dict = {}
-#     for (patnum,name) in cur.execute(cmd):
-#         name = ' '.join(name_standardize(name))
-#         name_dict[patnum] = name
-#         index.add(str(patnum),Simhash(shingle(name,kshingle)))
-
-#     con.close()
-
-#     groups = [[name_dict[pn] for pn in grp] for grp in c.groups()]
-#     if info:
-#         sgroups = sorted(groups,key=len,reverse=True)
-#         gnames = map(op.itemgetter(0),sgroups)
-#         glens = map(len,sgroups)
-#         gnamelens = zip(gnames,glens)
-#         return (sgroups,gnamelens)
-#     else:
-#         return groups
-
-# objs = [(str(k), Simhash(get_features(v))) for k, v in data.items()]
+# record match pairs -> levenshtein -> clustering

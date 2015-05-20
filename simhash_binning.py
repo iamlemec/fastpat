@@ -1,15 +1,18 @@
-# Created by Liang Sun in 2013
-# Modified by Doug Hanley 2015
+# Simhash ported from Liang Sun (2013)
 
 # name matching using locally sensitive hashing
 
-from itertools import chain
+from itertools import chain, izip, imap
 from collections import defaultdict
-from hashlib import md5
 import operator as op
+
 import re
 import sqlite3
+
 import numpy as np
+from hashlib import md5
+import distance
+import networkx as nx
 
 #
 # name standardization, separate from usual standardization
@@ -55,6 +58,7 @@ subsies = {
   'TECHNOLOGIES': 'TECH',
   'TECHNOLOGY': 'TECH',
   'MANUFACTURING': 'MANUF',
+  'MANUFACTURE': 'MANUF',
   'SEMICONDUCTORS': 'SEMI',
   'SEMICONDUCTOR': 'SEMI',
   'RESEARCH': 'RES',
@@ -112,7 +116,9 @@ subsies = {
   'KOMMANDITGESELLSCHAFT': 'KG',
   'INNOVATIONS': 'INNOV',
   'INNOVATION': 'INNOV',
-  'ENTERTAINMENT': 'ENTER'
+  'ENTERTAINMENT': 'ENTER',
+  'ENTERPRISES': 'ENTER',
+  'ENTERPRISE': 'ENTER'
 }
 subsies_re = re.compile(r"\b(" + "|".join(subsies.keys()) + r")\b")
 
@@ -162,90 +168,19 @@ def shingle(s, k=2):
     for i in range(len(s) - k + 1):
         yield s[i:i+k]
 
-class UnionFind:
-    """
-    Union-find data structure.
-
-    Each unionFind instance X maintains a family of disjoint sets of
-    hashable objects, supporting the following two methods:
-
-    - X[item] returns a name for the set containing the given item.
-    Each set is named by an arbitrarily-chosen one of its members; as
-    long as the set remains unchanged it will keep the same name. If
-    the item is not yet part of a set in X, a new singleton set is
-    created for it.
-
-    - X.union(item1, item2, ...) merges the sets containing each item
-    into a single larger set. If any item is not yet part of a set
-    in X, it is added to X as one of the members of the merged set.
-    
-    Source: http://www.ics.uci.edu/~eppstein/PADS/UnionFind.py
-
-    Union-find data structure. Based on Josiah Carlson's code,
-    http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/215912
-    with significant additional changes by D. Eppstein.
-    """
-
-    def __init__(self):
-        """Create a new empty union-find structure."""
-        self.weights = {}
-        self.parents = {}
-
-    def __getitem__(self, object):
-        """Find and return the name of the set containing the object."""
-        # check for previously unknown object
-        if object not in self.parents:
-            self.parents[object] = object
-            self.weights[object] = 1
-            return object
-
-        # find path of objects leading to the root
-        path = [object]
-        root = self.parents[object]
-        
-        while root != path[-1]:
-            path.append(root)
-            root = self.parents[root]
-
-        # compress the path and return
-        for ancestor in path:
-            self.parents[ancestor] = root
-            
-        return root
-
-    def __iter__(self):
-        """Iterate through all items ever found or unioned by this structure."""
-        return iter(self.parents)
-
-    def union(self, *objects):
-        """Find the sets containing the objects and merge them all."""
-        roots = [self[x] for x in objects]
-        heaviest = max([(self.weights[r],r) for r in roots])[1]
-        for r in roots:
-            if r != heaviest:
-                self.weights[heaviest] += self.weights[r]
-                self.parents[r] = heaviest
-
-    def sets(self):
-        """Return a list of each disjoint set"""
-        ret = defaultdict(list)
-        for k, _ in self.parents.iteritems():
-            ret[self[k]].append(k)
-        return ret
-
-class SimhashIndex:
+class Simhash:
     # dim is the simhash width, k is the tolerance
-    def __init__(self, dim=64, k=2):
-        """
-        """
-        self.k = k
+    def __init__(self, dim=64, k=3, thresh=1):
         self.dim = dim
-        self.unions = UnionFind()
-        self.hashmaps = [defaultdict(list) for _ in range(k+1)]
+        self.k = k
+        self.thresh = thresh
 
+        self.unions = []
+
+        self.hashmaps = [defaultdict(list) for _ in range(k+1)] # defaultdict(list)
         self.masks = [1 << i for i in range(dim)]
 
-        self.offsets = [self.dim // (self.k + 1) * i for i in range(self.k + 1)]
+        self.offsets = [self.dim // self.k * i for i in range(self.k)]
         self.bin_masks = [(i == len(self.offsets) - 1 and 2 ** (self.dim - offset) - 1 or 2 ** (self.offsets[i+1]-offset) - 1) for (i,offset) in enumerate(self.offsets)]
 
     # add item to the cluster
@@ -254,33 +189,20 @@ class SimhashIndex:
         if label is None:
             label = item
 
-        # Add to unionfind structure
-        self.unions[label]
-
         # get simhash signature
         simhash = self.sign(item,weights)
+        keyvec = self.get_keys(simhash)
 
         # Unite labels with the same keys in the same band
-        for idx, key in enumerate(self.get_keys(simhash)):
-            self.hashmaps[idx][key].append(label)
-            self.unions.union(label,self.hashmaps[idx][key][0])
-
-    # get the clustering result
-    def groups(self):
-        return self.unions.sets()
-
-    # get a set of matching labels for item
-    def match(self, item):
-        # Get signature
-        simhash = self.sign(item)
-        
-        matches = set()
-        
-        for idx, key in enumerate(self.get_keys(simhash)):
-            if key in self.hashmaps[idx]:
-                matches.update(self.hashmaps[idx][key])
-        
-        return matches
+        matches = defaultdict(int)
+        for idx, key in enumerate(keyvec):
+            others = self.hashmaps[idx][key]
+            for l in others:
+                matches[l] += 1
+            others.append(label)
+        for (out,val) in matches.iteritems():
+            if val >= self.thresh:
+                self.unions.append((label,out))
 
     # compute actual simhash
     def sign(self, features, weights):
@@ -300,51 +222,138 @@ class SimhashIndex:
     # bin simhash into chunks
     def get_keys(self, simhash):
         for (i,(offset,mask)) in enumerate(zip(self.offsets,self.bin_masks)):
-            c = simhash >> offset & mask
-            yield '%x:%x' % (c, i)
+            yield simhash >> offset & mask
 
+def autodb(fname):
+    def wrap(f):
+        fvars = f.func_code.co_varnames
+        has_con = 'con' in fvars
+        has_cur = 'cur' in fvars
+        if has_con or has_cur:
+            def f1(*args,**kwargs):
+                con = sqlite3.connect(fname)
+                if has_cur:
+                    cur = con.cursor()
+                    if has_con:
+                        ret = f(con=con,cur=cur,*args,**kwargs)
+                    else:
+                        ret = f(cur=cur,*args,**kwargs)
+                else:
+                    ret = f(con=con,*args,**kwargs)
+                con.close()
+                return ret
+            return f1
+        else:
+            return f
+    return wrap
 
-def firm_buckets(npat=None,reverse=False,nshingle=2,store=False,**kwargs):
+def generate_names():
     con = sqlite3.connect('store/patents.db')
     cur = con.cursor()
 
-    c = SimhashIndex(**kwargs)
+    cur.execute('drop table if exists patent_std')
+    cur.execute('create table patent_std (patnum int, namestd int)')
 
-    cmd = 'select patnum,owner,country from patent where owner!=\'\''
+    for (patnum,owner,country) in cur.execute('select patnum,owner,country from patent where owner!=\'\'').fetchall():
+        toks = name_standardize(owner)
+        namestd = ' '.join(toks) + ' (' + country + ')'
+        cur.execute('insert into patent_std values (?,?)',(patnum,namestd))
+
+    cur.execute('drop table if exists owner')
+    cur.execute('create table owner (ownerid integer primary key asc, name text)')
+    cur.execute('insert into owner(name) select distinct namestd from patent_std')
+
+    cur.execute('drop table if exists patown')
+    cur.execute('create table patown (patnum int, ownerid int)')
+    cur.execute('insert into patown select patnum,ownerid from patent_std join owner on patent_std.namestd=owner.name')
+
+    con.commit()
+
+# k = 8, thresh = 4 works well
+def owner_cluster(nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
+    con = sqlite3.connect('store/patents.db')
+    cur = con.cursor()
+
+    c = Simhash(**kwargs)
+
+    cmd = 'select ownerid,name from owner'
     if reverse:
         cmd += ' order by rowid desc'
-    if npat:
-        cmd += ' limit {}'.format(npat)
+    if nitem:
+        cmd += ' limit %' % nitem
 
     name_dict = {}
-    i = 0
-    for (patnum,owner,country) in cur.execute(cmd):
-        toks = name_standardize(owner)
-        name = ' '.join(toks)
-        name_shings = list(shingle(name,nshingle))
-        features = name_shings + toks + [country]
-        weights = [1.0]*len(name_shings) + [3.0]*len(toks) + [3.0]
-        c.add(features,weights=weights,label=patnum)
+    for (i,(ownerid,name)) in enumerate(cur.execute(cmd)):
+        words = name.split()
+        shings = list(shingle(name,nshingle))
 
-        name += ' (' + country + ')'
-        name_dict[patnum] = name
+        features = shings + words
+        weights = list(np.linspace(1.0,0.0,len(shings))) + list(np.linspace(1.0,0.0,len(words)-1)) + [1.0]
 
-        i += 1
+        c.add(features,weights=weights,label=ownerid)
+        name_dict[ownerid] = name
+
         if i%100000 == 0: print i
 
-    groups = c.groups()
+    ipairs = c.unions
+    npairs = map(lambda p: map(name_dict.get,p),ipairs)
+    print 'Found %i pairs' % len(ipairs)
+
     if store:
-        cur.execute('drop table if exists cluster')
-        cur.execute('create table cluster (patnum int, clusterid int)')
-
-        for (cid,(_,group)) in enumerate(c.groups().items()):
-            cur.executemany('insert into cluster values (?,?)',[(patnum,cid) for patnum in group])
-
+        cur.execute('drop table if exists pair')
+        cur.execute('create table pair (ownerid1 int, ownerid2 int, name1 text, name2 text)')
+        cur.executemany('insert into pair values (?,?,?,?)',imap(lambda ((o1,o2),(n1,n2)): (o1,o2,n1,n2),izip(ipairs,npairs)))
         con.commit()
+        con.close()
     else:
-        (gnames,sgroups) = zip(*sorted(groups.items(),key=lambda (k,v): len(v),reverse=True))
-        sgroups = map(lambda g: map(name_dict.get,g),sgroups)
-        gnames = map(name_dict.get,gnames)
-        glens = map(len,sgroups)
-        guniq = map(lambda g: len(np.unique(g)),sgroups)
-        return (sgroups,gnames,guniq,glens)
+        return (ipairs,npairs)
+
+# compute distances on owners in same cluster
+def compute_distances(nitem=None,store=False):
+    con = sqlite3.connect('store/patents.db')
+    cur = con.cursor()
+
+    cur.execute('drop table if exists distance')
+    cur.execute('create table distance (ownerid1 int, ownerid2 int, dist float)')
+
+    cmd = 'select * from pair'
+    if nitem:
+        cmd += ' limit %i' % nitem
+    pairs = cur.execute(cmd).fetchall()
+
+    dmetr = lambda name1,name2: 1.0-float(distance.levenshtein(name1,name2))/max(len(name1),len(name2))
+    dists = map(lambda (o1,o2,n1,n2): (o1,o2,dmetr(n1,n2)),cur.execute(cmd))
+    dists += map(lambda (o1,o2,d): (o2,o1,d),dists) # symmetric matrix
+
+    if store:
+        cur.executemany('insert into distance values (?,?,?)',dists)
+        con.commit()
+        con.close()
+    else:
+        con.close()
+        return dists
+
+# find components using distance metrics
+def compute_components(thresh=0.7):
+    con = sqlite3.connect('store/patents.db')
+    cur = con.cursor()
+
+    dists = cur.execute('select * from distance')
+    close = map(op.itemgetter(0,1),filter(lambda (o1,o2,d): d > thresh,dists))
+    G = nx.Graph()
+    G.add_edges_from(close)
+    comps = sorted(list(nx.connected_components(G)),key=len,reverse=True)
+
+    con.close()
+
+    return comps
+
+def get_names(olist):
+    con = sqlite3.connect('store/patents.db')
+    cur = con.cursor()
+
+    names = cur.execute('select * from owner where ownerid in (%s)' % ','.join(map(str,olist))).fetchall()
+
+    con.close()
+
+    return names
