@@ -1,6 +1,5 @@
+# name matching using locally sensitive hashing (simhash)
 # Simhash ported from Liang Sun (2013)
-
-# name matching using locally sensitive hashing
 
 from itertools import chain, izip, imap
 from collections import defaultdict
@@ -15,144 +14,31 @@ import distance
 import networkx as nx
 
 #
-# name standardization, separate from usual standardization
+# globals
 #
 
-# acronyms
-acronym1 = r"\b(\w) (\w) (\w)\b"
-acronym1_re = re.compile(acronym1)
-acronym2 = r"\b(\w) (\w)\b"
-acronym2_re = re.compile(acronym2)
-acronym3 = r"\b(\w)-(\w)-(\w)\b"
-acronym3_re = re.compile(acronym3)
-acronym4 = r"\b(\w)-(\w)\b"
-acronym4_re = re.compile(acronym4)
-acronym5 = r"\b(\w\w)&(\w)\b"
-acronym5_re = re.compile(acronym5)
-acronym6 = r"\b(\w)&(\w)\b"
-acronym6_re = re.compile(acronym6)
-acronym7 = r"\b(\w) & (\w)\b"
-acronym7_re = re.compile(acronym7)
+db_fname = 'store/patents.db'
 
-# punctuation
-punct0 = r"'S|\(.*\)|\."
-punct1 = r"[^\w\s]"
-punct0_re = re.compile(punct0)
-punct1_re = re.compile(punct1)
+#
+# weak name standardization
+#
 
-# generic terms
-generics = ['THE','A','OF','AND','AN']
-corps = ['INC','LLC','LTD','CORP','COMP','AG','NV','BV','GMBH','CO','BV','SA','AB','SE','KK']
-dropout = generics + corps
-gener_re = re.compile('|'.join([r"\b{}\b".format(el) for el in dropout]))
+# regular expression substitutions
+paren = r"'S|\(.*\)|\."
+punct = r"[^\w\s]"
+space = r"[ ]{2,}"
 
-# substitutions - essentially lower their weighting
-subsies = {
-  'CORPORATION': 'CORP',
-  'INCORPORATED': 'INC',
-  'COMPANY': 'COMP',
-  'LIMITED': 'LTD',
-  'KABUSHIKI KAISHA': 'KK',
-  'AKTIENGESELLSCHAFT': 'AG',
-  'AKTIEBOLAG': 'AB',
-  'TECHNOLOGIES': 'TECH',
-  'TECHNOLOGY': 'TECH',
-  'MANUFACTURING': 'MANUF',
-  'MANUFACTURE': 'MANUF',
-  'SEMICONDUCTORS': 'SEMI',
-  'SEMICONDUCTOR': 'SEMI',
-  'RESEARCH': 'RES',
-  'COMMUNICATIONS': 'COMM',
-  'COMMUNICATION': 'COMM',
-  'SYSTEMS': 'SYS',
-  'PHARMACEUTICALS': 'PHARMA',
-  'PHARMACEUTICAL': 'PHARMA',
-  'ELECTRONICS': 'ELEC',
-  'INTERNATIONAL': 'INTL',
-  'INDUSTRIES': 'INDS',
-  'INDUSTRY': 'INDS',
-  'CHEMICALS': 'CHEM',
-  'CHEMICAL': 'CHEM',
-  'LABORATORIES': 'LABS',
-  'LABORATORY': 'LABS',
-  'PRODUCTS': 'PROD',
-  'ENGINEERING': 'ENG',
-  'RESEARCH': 'RES',
-  'DEVELOPMENT': 'DEV',
-  'REPRESENTED': 'REPR',
-  'SECRETARY': 'SECR',
-  'PRODUCTS': 'PROD',
-  'INDUSTRIAL': 'IND',
-  'ASSOCIATES': 'ASSOC',
-  'INSTRUMENTS': 'INSTR',
-  'NATIONAL': 'NATL',
-  'STANDARD': 'STD',
-  'ORGANIZATION': 'ORG',
-  'EQUIPMENT': 'EQUIP',
-  'GESELLSCHAFT': 'GS',
-  'INSTITUTE': 'INST',
-  'MASCHINENFABRIK': 'MF',
-  'AKTIEBOLAGET': 'AB',
-  'SEISAKUSHO': 'SSS',
-  'COMPAGNIE': 'COMP',
-  'NATIONALE': 'NATL',
-  'FOUNDATION': 'FOUND',
-  'CONTINENTAL': 'CONTL',
-  'INTERCONTINENTAL': 'INTER',
-  'INDUSTRIE': 'IND',
-  'INDUSTRIELLE': 'IND',
-  'ELECTRICAL': 'ELEC',
-  'ELECTRIC': 'ELEC',
-  'UNIVERSITY': 'UNIV',
-  'MICROSYSTEMS': 'MICRO',
-  'MICROELECTRONICS': 'MICRO',
-  'TELECOMMUNICATIONS': 'TELE',
-  'HOLDINGS': 'HLDG',
-  'MASSACHUSSETTES': 'MASS',
-  'MINNESOTA': 'MINN',
-  'MANAGEMENT': 'MGMT',
-  'DEPARTMENT': 'DEP',
-  'ADMINISTRATOR': 'ADMIN',
-  'KOMMANDITGESELLSCHAFT': 'KG',
-  'INNOVATIONS': 'INNOV',
-  'INNOVATION': 'INNOV',
-  'ENTERTAINMENT': 'ENTER',
-  'ENTERPRISES': 'ENTER',
-  'ENTERPRISE': 'ENTER'
-}
-subsies_re = re.compile(r"\b(" + "|".join(subsies.keys()) + r")\b")
+paren_re = re.compile(paren)
+punct_re = re.compile(punct)
+space_re = re.compile(space)
 
-# standardize a firm name
+# standardize firm name
 def name_standardize(name):
     name_strip = name
-
-    name_strip = acronym1_re.sub(r"\1\2\3",name_strip)
-    name_strip = acronym2_re.sub(r"\1\2",name_strip)
-    name_strip = acronym3_re.sub(r"\1\2\3",name_strip)
-    name_strip = acronym4_re.sub(r"\1\2",name_strip)
-    name_strip = acronym5_re.sub(r"\1\2",name_strip)
-    name_strip = acronym6_re.sub(r"\1\2",name_strip)
-    name_strip = acronym7_re.sub(r"\1\2",name_strip)
-
-    name_strip = punct0_re.sub('',name_strip)
-    name_strip = punct1_re.sub(' ',name_strip)
-
-    name_strip = subsies_re.sub(lambda x: subsies[x.group()],name_strip)
-    name_strip = gener_re.sub('',name_strip)
-
-    return name_strip.split()
-
-city_parts = ['DO','SI','SHI']
-city_re = re.compile('|'.join([r"\b{}\b".format(el) for el in city_parts]))
-
-# standardize a city name
-def city_standardize(city):
-    city_strip = city.split(',')[0]
-
-    city_strip = punct1_re.sub(' ',city_strip)
-    city_strip = city_re.sub('',city_strip)
-
-    return city_strip.split()
+    name_strip = paren_re.sub(' ',name_strip)
+    name_strip = punct_re.sub(' ',name_strip)
+    name_strip = space_re.sub(' ',name_strip)
+    return name_strip
 
 #
 # locally sensitive hashing code
@@ -210,7 +96,7 @@ class Simhash:
             weights = [1.0]*len(features)
         hashs = map(hashfunc,features)
         v = [0.0]*self.dim
-        for (h,w) in zip(hashs,weights):
+        for (h,w) in izip(hashs,weights):
             for i in xrange(self.dim):
                 v[i] += w if h & self.masks[i] else -w
         ans = 0
@@ -224,6 +110,11 @@ class Simhash:
         for (i,(offset,mask)) in enumerate(zip(self.offsets,self.bin_masks)):
             yield simhash >> offset & mask
 
+#
+# data processing routines
+#
+
+# white magic
 def autodb(fname):
     def wrap(f):
         fvars = f.func_code.co_varnames
@@ -247,17 +138,13 @@ def autodb(fname):
             return f
     return wrap
 
-def generate_names():
-    con = sqlite3.connect('store/patents.db')
-    cur = con.cursor()
-
+@autodb(db_fname)
+def generate_names(con,cur):
     cur.execute('drop table if exists patent_std')
     cur.execute('create table patent_std (patnum int, namestd int)')
 
-    for (patnum,owner,country) in cur.execute('select patnum,owner,country from patent where owner!=\'\'').fetchall():
-        toks = name_standardize(owner)
-        namestd = ' '.join(toks) + ' (' + country + ')'
-        cur.execute('insert into patent_std values (?,?)',(patnum,namestd))
+    ret = cur.execute('select patnum,owner from patent where owner!=\'\'')
+    cur.executemany('insert into patent_std values (?,?)',map(lambda (patnum,owner): (patnum,name_standardize(owner)),ret))
 
     cur.execute('drop table if exists owner')
     cur.execute('create table owner (ownerid integer primary key asc, name text)')
@@ -270,17 +157,15 @@ def generate_names():
     con.commit()
 
 # k = 8, thresh = 4 works well
-def owner_cluster(nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
-    con = sqlite3.connect('store/patents.db')
-    cur = con.cursor()
-
+@autodb(db_fname)
+def owner_cluster(con,cur,nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
     c = Simhash(**kwargs)
 
     cmd = 'select ownerid,name from owner'
     if reverse:
         cmd += ' order by rowid desc'
     if nitem:
-        cmd += ' limit %' % nitem
+        cmd += ' limit %i' % nitem
 
     name_dict = {}
     for (i,(ownerid,name)) in enumerate(cur.execute(cmd)):
@@ -288,15 +173,16 @@ def owner_cluster(nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
         shings = list(shingle(name,nshingle))
 
         features = shings + words
-        weights = list(np.linspace(1.0,0.0,len(shings))) + list(np.linspace(1.0,0.0,len(words)-1)) + [1.0]
+        weights = list(np.linspace(1.0,0.0,len(shings))) + list(np.linspace(1.0,0.0,len(words)))
 
         c.add(features,weights=weights,label=ownerid)
         name_dict[ownerid] = name
 
-        if i%100000 == 0: print i
+        if i%10000 == 0:
+            print i
 
     ipairs = c.unions
-    npairs = map(lambda p: map(name_dict.get,p),ipairs)
+    npairs = imap(lambda p: map(name_dict.get,p),ipairs)
     print 'Found %i pairs' % len(ipairs)
 
     if store:
@@ -304,15 +190,12 @@ def owner_cluster(nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
         cur.execute('create table pair (ownerid1 int, ownerid2 int, name1 text, name2 text)')
         cur.executemany('insert into pair values (?,?,?,?)',imap(lambda ((o1,o2),(n1,n2)): (o1,o2,n1,n2),izip(ipairs,npairs)))
         con.commit()
-        con.close()
     else:
         return (ipairs,npairs)
 
 # compute distances on owners in same cluster
-def compute_distances(nitem=None,store=False):
-    con = sqlite3.connect('store/patents.db')
-    cur = con.cursor()
-
+@autodb(db_fname)
+def compute_distances(con,cur,nitem=None,store=False):
     cur.execute('drop table if exists distance')
     cur.execute('create table distance (ownerid1 int, ownerid2 int, dist float)')
 
@@ -323,37 +206,27 @@ def compute_distances(nitem=None,store=False):
 
     dmetr = lambda name1,name2: 1.0-float(distance.levenshtein(name1,name2))/max(len(name1),len(name2))
     dists = map(lambda (o1,o2,n1,n2): (o1,o2,dmetr(n1,n2)),cur.execute(cmd))
-    dists += map(lambda (o1,o2,d): (o2,o1,d),dists) # symmetric matrix
 
     if store:
         cur.executemany('insert into distance values (?,?,?)',dists)
         con.commit()
-        con.close()
     else:
-        con.close()
-        return dists
+        return list(dists)
 
 # find components using distance metrics
-def compute_components(thresh=0.7):
-    con = sqlite3.connect('store/patents.db')
-    cur = con.cursor()
-
+@autodb(db_fname)
+def compute_components(con,cur,thresh=0.85):
     dists = cur.execute('select * from distance')
-    close = map(op.itemgetter(0,1),filter(lambda (o1,o2,d): d > thresh,dists))
+    close = imap(op.itemgetter(0,1),filter(lambda (o1,o2,d): d > thresh,dists))
+
     G = nx.Graph()
     G.add_edges_from(close)
     comps = sorted(list(nx.connected_components(G)),key=len,reverse=True)
 
-    con.close()
-
     return comps
 
-def get_names(olist):
-    con = sqlite3.connect('store/patents.db')
-    cur = con.cursor()
+@autodb(db_fname)
+def get_names(con,cur,olist=[]):
+    return cur.execute('select * from owner where ownerid in (%s)' % ','.join(map(str,olist))).fetchall()
 
-    names = cur.execute('select * from owner where ownerid in (%s)' % ','.join(map(str,olist))).fetchall()
-
-    con.close()
-
-    return names
+# add in a few corp reductions, esp kabushiki kaisha
