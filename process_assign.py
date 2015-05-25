@@ -59,7 +59,7 @@ def name_standardize_strong(name):
 
 # actually store the data
 store = True
-fd
+
 # open db
 db_fname = 'store/patents.db'
 conn = sqlite3.connect(db_fname)
