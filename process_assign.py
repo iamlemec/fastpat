@@ -87,8 +87,8 @@ for row in cur.execute('select rowid,patnum,assignor,assignee,conveyance from as
   word_match /= max(1.0,0.5*(len(assignor_toks)+len(assignee_toks)))
   match = word_match > 0.5
 
-  if match:
-    print '{:7}-{:7}, {:4.2}-{}: {:40.40} -> {:40.40}'.format(rowid,patnum,word_match,int(match),assignor,assignee)
+  # if match:
+  #   print '{:7}-{:7}, {:4.2}-{}: {:40.40} -> {:40.40}'.format(rowid,patnum,word_match,int(match),assignor,assignee)
 
   if store:
     same_flags.append((match,rowid))
