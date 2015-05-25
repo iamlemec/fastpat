@@ -11,21 +11,7 @@ db_fname = 'store/patents.db'
 conn = sqlite3.connect(db_fname)
 cur = conn.cursor()
 cur_same = conn.cursor()
-cmd_same = 'update assignment set same_flag=? where rowid=?'
-
-# create flag tables
-try:
-  cur.execute('alter table assignment add column same_flag int default 0')
-except:
-  pass
-try:
-  cur.execute('alter table assignment add column dup_flag int default 0')
-except:
-  pass
-try:
-  cur.execute('alter table assignment add column use_flag int default 0')
-except:
-  pass
+cmd_same = 'update assignment_pat set dup_flag=? where rowid=?'
 
 batch_size = 1000
 same_flags = []
@@ -71,8 +57,8 @@ if store:
     cur_same.executemany(cmd_same,same_flags)
 
   # use the first entry that doesn't have same_flag=1
-  cur.execute('update assignment set use_flag=1 where rowid in (select min(rowid) from assignment group by patnum,execdate,same_flag) and same_flag=0')
-  cur.execute('create table assignment_use as select * from assignment where use_flag=1')
+  cur.execute('drop table if exists assignment_use')
+  cur.execute('create table assignment_use as select * from assignment_pat where rowid in (select min(rowid) from assignment_pat group by patnum,execdate,dup_flag) and dup_flag=0')
   cur.execute('create unique index assign_idx on assignment_use(patnum,execdate)')
 
   # commit changes

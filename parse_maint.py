@@ -3,7 +3,7 @@ import pandas as pd
 import pandas.io.sql as sqlio
 
 # connect to nber db
-db_fname = 'store/maint.db'
+db_fname = 'store/patents.db'
 con = sqlite3.connect(db_fname)
 cur = con.cursor()
 
@@ -12,7 +12,7 @@ print 'Writing table'
 
 datf = pd.read_csv('maint_files/MaintFeeEvents_20140310.txt',sep=' ',error_bad_lines=False,header=0,usecols=[0,2,6],names=['patnum','is_small','event_code'])
 cur.execute('drop table if exists maint')
-sqlio.write_frame(datf,'maint',con)
+sqlio.write_sql(datf,'maint',con)
 
 # clean up data
 print 'Data cleanup'
@@ -40,4 +40,3 @@ cur.execute('update maint set life_span=17 where last_maint==12')
 # commit and close
 con.commit()
 con.close()
-

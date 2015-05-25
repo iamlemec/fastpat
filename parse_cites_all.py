@@ -6,7 +6,7 @@ import sqlite3
 import itertools
 
 # connect to nber db
-db_fname = 'store/citations.db'
+db_fname = 'store/patents.db'
 con = sqlite3.connect(db_fname)
 cur = con.cursor()
 

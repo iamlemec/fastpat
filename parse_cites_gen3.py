@@ -17,7 +17,7 @@ else:
 
 if store_db:
   # database file
-  db_fname = 'store/citations.db'
+  db_fname = 'store/patents.db'
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:

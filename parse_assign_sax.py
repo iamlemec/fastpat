@@ -180,7 +180,8 @@ class AssignmentHandler(handler.ContentHandler):
 
     self.valid += 1
 
-    #print '{:7},{:8},{:8},{: >20.20}: {: >30.30} -> {: <30.30}'.format(self.patnum,self.exec_date,self.recd_date,self.conveyance,self.assignor_name,self.assignee_name)
+    if not store_db:
+      print '{:7},{:8},{:8},{: >20.20}: {: >30.30} -> {: <30.30}'.format(self.patnum,self.exec_date,self.recd_date,self.conveyance,self.assignor_name,self.assignee_name)
 
     # store in assign db
     if store_db:
@@ -211,4 +212,3 @@ print in_fname
 print assign_handler.recs
 print assign_handler.pats
 print assign_handler.valid
-

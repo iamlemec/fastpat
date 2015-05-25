@@ -5,7 +5,6 @@ import sqlite3
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-import pandas.io.sql as sqlio
 
 import vector_tools as vt
 import data_tools as dt
@@ -35,17 +34,13 @@ if run_flags[0]:
 
     # load firm data
     # firm_life starts a firm when they file for their first patent and ends when they file for their last
-    con_within = sqlite3.connect('store/within.db')
-    datf_idx = sqlio.read_frame('select * from firmyear_index',con_within)
-    firm_info = sqlio.read_frame('select * from firm_life',con_within)
-    grant_info = sqlio.read_frame('select * from grant_info',con_within)
-    trans_info = sqlio.read_frame('select * from assign_info',con_within)
-    con_within.close()
-
-    # load citation data
-    con_cites = sqlite3.connect('store/citations.db')
-    firm_cite_year = sqlio.read_frame('select * from firm_cite_year',con_cites)
-    con_cites.close()
+    con = sqlite3.connect('store/patents.db')
+    datf_idx = pd.read_sql('select * from firmyear_index',con)
+    firm_info = pd.read_sql('select * from firm_life',con)
+    grant_info = pd.read_sql('select * from patent_info',con)
+    trans_info = pd.read_sql('select * from assignment_info where execyear!=\'\'',con)
+    firm_cite_year = pd.read_sql('select * from firm_cite_year',con)
+    con.close()
 
     # basic stats
     datf_idx['naics'] = datf_idx['naics'].fillna(0).astype(np.int)
@@ -333,7 +328,7 @@ if run_flags[4]:
     grant_class_means = grant_class_groups.mean()
     grant_class_medians = grant_class_groups.median()
     grant_class_ffracs = grant_class_sums.apply(lambda df: dt.noinf(df.astype(np.float)/grant_class_groups.size()))
-    grant_class_info = dt.stack_frames([grant_class_base,grant_class_means,grant_class_medians,grant_class_ffracs],prefixes=['','grant_','grant_','grant_','grant_'],postfixes=['','_mean','_median','_ffrac'])
+    grant_class_info = dt.stack_frames([grant_class_base,grant_class_means,grant_class_medians,grant_class_ffracs],prefixes=['grant_','grant_','grant_','grant_','grant_'],postfixes=['','_mean','_median','_ffrac'])
     grant_class_info['grant_class_number'] = grant_class_info.index
     grant_class_info['grant_class_size'] = grant_class_size
 
@@ -373,7 +368,7 @@ if run_flags[5]:
     targ_model['file_stock_mean'] = firm_totals['file_stock_frac'].mean()
     targ_model['file_stock_young'] = firm_totals['file_stock_frac'][firm_totals['age_bin']==0].mean()
     targ_model['file_stock_small'] = firm_totals['file_stock_frac'][firm_totals['size_bin']==0].mean()
-    vt.Bundle(targ_model.dict()).to_json(file_name=data_dir+'targets.json')
+    vt.Bundle(targ_model.dict()).to_json(file_name='data/targets.json')
 
     # distributions for paper
     markup_bins = np.linspace(0.0,1.0,16)
@@ -386,4 +381,4 @@ if run_flags[5]:
     translag_mass = np.histogram(translag_data,bins=translag_bins)[0].astype(np.float)/len(translag_data)
     translag_vals = 0.5*(translag_bins[:-1]+translag_bins[1:])
 
-    json.dump({'markup_data':list(markup_mass),'translag_data':list(translag_mass)},open(data_dir+'distributions.json','w+'),indent=4)
+    json.dump({'markup_data':list(markup_mass),'translag_data':list(translag_mass)},open('data/distributions.json','w+'),indent=4)

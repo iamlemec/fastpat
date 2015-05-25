@@ -3,7 +3,6 @@ import itertools
 import sqlite3
 import numpy as np
 import pandas as pd
-import pandas.io.sql as sqlio
 
 # execution state
 if len(sys.argv) == 1:
@@ -12,101 +11,76 @@ else:
   stage = int(sys.argv[1])
 
 # open dbs
-db_fname_within = 'store/within.db'
-db_fname_pats = 'store/patents.db'
-db_fname_comp = 'store/compustat.db'
-db_fname_maint = 'store/maint.db'
-db_fname_cites = 'store/citations.db'
-con = sqlite3.connect(db_fname_within)
+db_fname = 'store/patents.db'
+con = sqlite3.connect(db_fname)
 cur = con.cursor()
-cur.execute('attach ? as patdb',(db_fname_pats,))
-cur.execute('attach ? as compdb',(db_fname_comp,))
-cur.execute('attach ? as maintdb',(db_fname_maint,))
-cur.execute('attach ? as citedb',(db_fname_cites,))
 
 if stage <= 0:
   # merge year data
-  print 'Merge with patent data'
+  print 'Merging with patent data'
 
-  cur.execute('drop table if exists grant_info')
-  cur.execute('create table grant_info (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int, high_tech int, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, life_grant int, life_file int, expryear int)')
-  cur.execute("""insert into grant_info select grant_basic.patnum,firm_num,fileyear,grantyear,classone,classtwo,0,num_trans.first_trans,num_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.life_span,0,0 from grant_basic
-                 left outer join (select patnum,min(strftime(\'%Y\',execdate)) as first_trans,count(*) as ntrans from assignment_use group by patnum) as num_trans on (grant_basic.patnum = num_trans.patnum)
-                 left outer join maint on (grant_basic.patnum = maint.patnum)
-                 left outer join cite_stats on (grant_basic.patnum = cite_stats.patnum)""")
-  cur.execute('update grant_info set ntrans=0 where ntrans is null')
-  cur.execute('update grant_info set n_cited=0 where n_cited is null')
-  cur.execute('update grant_info set n_self_cited=0 where n_self_cited is null')
-  cur.execute('update grant_info set n_citing=0 where n_citing is null')
-  cur.execute('update grant_info set life_grant=4 where life_grant is null')
-  cur.execute('update grant_info set life_file=life_grant+grantyear-fileyear')
-  cur.execute('update grant_info set expryear=grantyear+life_grant')
+  cur.execute('drop table if exists patent_info')
+  cur.execute('create table patent_info (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int, high_tech int, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, life_grant int, life_file int, expryear int)')
+  cur.execute("""insert into patent_info select patent_basic.patnum,firm_num,fileyear,grantyear,classone,classtwo,0,num_trans.first_trans,num_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.life_span,0,0 from patent_basic
+                 left outer join (select patnum,min(strftime('%Y',execdate)) as first_trans,count(*) as ntrans from assignment_use group by patnum) as num_trans on (patent_basic.patnum = num_trans.patnum)
+                 left outer join maint on (patent_basic.patnum = maint.patnum)
+                 left outer join cite_stats on (patent_basic.patnum = cite_stats.patnum)""")
+  cur.execute('update patent_info set ntrans=0 where ntrans is null')
+  cur.execute('update patent_info set n_cited=0 where n_cited is null')
+  cur.execute('update patent_info set n_self_cited=0 where n_self_cited is null')
+  cur.execute('update patent_info set n_citing=0 where n_citing is null')
+  cur.execute('update patent_info set life_grant=4 where life_grant is null')
+  cur.execute('update patent_info set life_file=life_grant+grantyear-fileyear')
+  cur.execute('update patent_info set expryear=grantyear+life_grant')
 
   ht_classes = (340,375,379,701,370,345,353,367,381,382,386,235,361,365,700,708,710,713,714,719,318,706,342,343,455,438,711,716,341,712,705,707,715,717)
-  cur.execute('update grant_info set high_tech=1 where classone in ('+','.join(map(str,ht_classes))+')')
+  cur.execute('update patent_info set high_tech=1 where classone in ('+','.join(map(str,ht_classes))+')')
 
 if stage <= 1:
   # aggregate by firm-year
-  print 'Aggregate by firm-year'
+  print 'Aggregating by firm-year'
 
   cur.execute('drop table if exists source_tot')
   cur.execute('create table source_tot (firm_num int, year int, nbulk int, pnum int)')
-  cur.execute('insert into source_tot select source_fn,execyear,count(*),sum(ntrans) from assign_bulk group by source_fn,execyear')
+  cur.execute('insert into source_tot select source_fn,execyear,count(*),sum(ntrans) from assignment_bulk group by source_fn,execyear')
 
   cur.execute('drop table if exists dest_tot')
   cur.execute('create table dest_tot (firm_num int, year int, nbulk int, pnum int)')
-  cur.execute('insert into dest_tot select dest_fn,execyear,count(*),sum(ntrans) from assign_bulk group by dest_fn,execyear')
+  cur.execute('insert into dest_tot select dest_fn,execyear,count(*),sum(ntrans) from assignment_bulk group by dest_fn,execyear')
 
   cur.execute('drop table if exists file_tot')
   cur.execute('create table file_tot (firm_num int, year int, pnum int)')
-  cur.execute('insert into file_tot select firm_num,fileyear,count(*) from grant_info group by firm_num,fileyear')
+  cur.execute('insert into file_tot select firm_num,fileyear,count(*) from patent_info group by firm_num,fileyear')
 
   cur.execute('drop table if exists grant_tot')
   cur.execute('create table grant_tot (firm_num int, year int, pnum int, n_cited int, n_self_cited int, n_citing int)')
-  cur.execute('insert into grant_tot select firm_num,grantyear,count(*),sum(n_cited),sum(n_self_cited),sum(n_citing) from grant_info group by firm_num,grantyear')
+  cur.execute('insert into grant_tot select firm_num,grantyear,count(*),sum(n_cited),sum(n_self_cited),sum(n_citing) from patent_info group by firm_num,grantyear')
 
   cur.execute('drop table if exists expire_tot')
   cur.execute('create table expire_tot (firm_num int, year int, pnum int)')
-  cur.execute('insert into expire_tot select firm_num,expryear,count(*) from grant_info group by firm_num,expryear')
+  cur.execute('insert into expire_tot select firm_num,expryear,count(*) from patent_info group by firm_num,expryear')
+
+  cur.execute('drop table if exists compustat_tot')
+  cur.execute("""create table compustat_tot (firm_num int, year int, gvkey int, assets real, capx real,
+                 cash real, cogs real, deprec real, income real, employ real, intan real, debt real,
+                 revenue real, sales real, rnd real, fcost real, mktval real, acquire real, naics int, sic int)""")
+  cur.execute("""insert into compustat_tot select firm_num,year,gvkey,sum(assets),sum(capx),sum(cash),sum(cogs),sum(deprec),sum(income),
+                 sum(employ),sum(intan),sum(debt),sum(revenue),sum(sales),sum(rnd),sum(fcost),sum(mktval),sum(acquire),naics,sic
+                 from compustat_merge group by firm_num,year""")
 
 if stage <= 2:
-  # get all firm-years
-  print 'Find all firm years'
-
-  cur.execute('drop table if exists compdb.firmyear_match')
-  cur.execute('create table compdb.firmyear_match (firm_num int, year int, gvkey int default null)')
-  cur.execute("""insert into compdb.firmyear_match select compustat.firm_num,firmyear.year,firmyear.gvkey
-                        from compdb.firmyear left outer join compustat on firmyear.gvkey = compustat.gvkey""")
+  # merge patent data together
+  print 'Merging fields together'
 
   cur.execute('drop table if exists firmyear_all')
   cur.execute('create table firmyear_all (firm_num int, year int)')
   cur.execute("""insert into firmyear_all
-        select distinct firm_num,year from source_tot
-  union select distinct firm_num,year from dest_tot
-  union select distinct firm_num,year from file_tot
-  union select distinct firm_num,year from grant_tot
-  union select distinct firm_num,year from compdb.firmyear_match
+        select firm_num,year from source_tot
+  union select firm_num,year from dest_tot
+  union select firm_num,year from file_tot
+  union select firm_num,year from grant_tot
+  union select firm_num,year from compustat_merge
   """)
-
-  cur.execute('drop table if exists firmyear_match')
-  cur.execute('create table firmyear_match (firm_num int, year int, gvkey int default null)')
-  cur.execute("""insert into firmyear_match select firmyear_all.firm_num,firmyear_all.year,compustat.gvkey
-  from firmyear_all left outer join compustat on firmyear_all.firm_num = compustat.firm_num""")
-
-  cur.execute('drop table if exists compustat_match')
-  cur.execute("""create table compustat_match (firm_num int, year int, gvkey int, assets real, capx real,
-                 cash real, cogs real, deprec real, income real, employ real, intan real, debt real,
-                 revenue real, sales real, rnd real, fcost real, mktval real, acquire real, naics int, sic int)""")
-  cur.execute("""insert into compustat_match select firmyear_match.firm_num,firmyear_match.year,firmyear.gvkey,
-  sum(assets),sum(capx),sum(cash),sum(cogs),sum(deprec),sum(income),sum(employ),sum(intan),sum(debt),
-  sum(revenue),sum(sales),sum(rnd),sum(fcost),sum(mktval),sum(acquire),naics,sic
-  from firmyear_match left outer join compdb.firmyear
-  on (firmyear_match.gvkey = firmyear.gvkey and firmyear_match.year = firmyear.year)
-  group by firmyear_match.firm_num,firmyear_match.year""")
-
-if stage <= 3:
-  # merge patent data together
-  print 'Merge fields together'
 
   cur.execute('drop table if exists firmyear_info')
   cur.execute("""create table firmyear_info (firm_num int, year int, source_nbulk int, source_pnum int, dest_nbulk int, dest_pnum int,
@@ -121,7 +95,7 @@ if stage <= 3:
   left outer join file_tot         on (firmyear_all.firm_num = file_tot.firm_num        and firmyear_all.year = file_tot.year)
   left outer join grant_tot        on (firmyear_all.firm_num = grant_tot.firm_num       and firmyear_all.year = grant_tot.year)
   left outer join expire_tot       on (firmyear_all.firm_num = expire_tot.firm_num      and firmyear_all.year = expire_tot.year)
-  left outer join compustat_match  on (firmyear_all.firm_num = compustat_match.firm_num and firmyear_all.year = compustat_match.year)""")
+  left outer join compustat_tot    on (firmyear_all.firm_num = compustat_tot.firm_num   and firmyear_all.year = compustat_tot.year)""")
   cur.execute('update firmyear_info set source_nbulk=0 where source_nbulk is null')
   cur.execute('update firmyear_info set source_pnum=0 where source_pnum is null')
   cur.execute('update firmyear_info set dest_nbulk=0 where dest_nbulk is null')
@@ -131,7 +105,7 @@ if stage <= 3:
   cur.execute('update firmyear_info set expire_pnum=0 where expire_pnum is null')
   cur.execute('delete from firmyear_info where year is null')
 
-if stage <= 4:
+if stage <= 3:
   # find set of good firm statistics
   print 'Finding firm statistics'
 
@@ -142,21 +116,22 @@ if stage <= 4:
 
   cur.execute('drop table if exists firm_hightech')
   cur.execute('create table firm_hightech (firm_num int, high_tech real)')
-  cur.execute('insert into firm_hightech select firm_num,avg(high_tech) from grant_info group by firm_num')
+  cur.execute('insert into firm_hightech select firm_num,avg(high_tech) from patent_info group by firm_num')
 
   cur.execute('drop table if exists firm_class_count')
   cur.execute('create table firm_class_count (firm_num int, class int, count int)')
-  cur.execute('insert into firm_class_count select firm_num,classone,count(*) from grant_info group by firm_num,classone')
+  cur.execute('insert into firm_class_count select firm_num,classone,count(*) from patent_info group by firm_num,classone')
   cur.execute('drop table if exists firm_class_mode')
   cur.execute('create table firm_class_mode (firm_num int, mode_class int, mode_count int)')
-  # cur.execute('insert into firm_class_mode select * from firm_class_count group by firm_num having count=max(count)') # this works but isn't technically valid, best to avoid
+  cur.execute('insert into firm_class_mode select * from firm_class_count group by firm_num having count=max(count)') # this works but isn't technically valid
   # in case of a tie, choose the highest classone number
-  cur.execute('insert into firm_class_mode select firm_num,max(class),max(count) from (select * from firm_class_count where count = (select max(count) from firm_class_count i where i.firm_num = firm_class_count.firm_num)) group by firm_num')
+  # cur.execute('insert into firm_class_mode select firm_num,max(class),max(count) from (select * from firm_class_count where count = (select max(count) from firm_class_count i where i.firm_num = firm_class_count.firm_num)) group by firm_num') # super slow
   cur.execute('drop table firm_class_count')
+
   cur.execute('drop table if exists firm_class_mode_2')
   cur.execute('create table firm_class_mode_2 (firm_num int, mode_class int, mode_count int, tot_pats int, mode_frac real)')
   cur.execute("""insert into firm_class_mode_2 select firm_class_mode.firm_num,mode_class,mode_count,tot_pats,null from firm_class_mode left outer join
-                 (select firm_num,count(*) as tot_pats from grant_match group by firm_num) as firm_pats
+                 (select firm_num,count(*) as tot_pats from patent_basic group by firm_num) as firm_pats
                  on (firm_class_mode.firm_num = firm_pats.firm_num)""")
   cur.execute('update firm_class_mode_2 set mode_frac=mode_count*1.0/tot_pats')
   cur.execute('drop table firm_class_mode')
@@ -174,13 +149,13 @@ if stage <= 4:
   cur.execute('drop table firm_hightech')
   cur.execute('drop table firm_class_mode')
 
-if stage <= 5:
+if stage <= 4:
     # construct patent stocks
     print 'Constructing patent stocks'
 
     # load firm data
-    firmyear_info = sqlio.read_frame('select * from firmyear_info',con)
-    firm_info = sqlio.read_frame('select * from firm_life',con)
+    firmyear_info = pd.read_sql('select * from firmyear_info',con)
+    firm_info = pd.read_sql('select * from firm_life',con)
 
     # make (firm_num,year) index
     fnum_set = firm_info['firm_num']
@@ -204,7 +179,7 @@ if stage <= 5:
     datf_idx = datf_idx[datf_idx['stock']>0]
 
     # write new frame to disk
-    sqlio.write_frame(datf_idx,'firmyear_index',con,if_exists='replace')
+    datf_idx.to_sql('firmyear_index',con,if_exists='replace')
 
 # clean up
 con.commit()

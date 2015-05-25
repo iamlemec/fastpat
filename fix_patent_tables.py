@@ -1,6 +1,6 @@
 import sqlite3
 
-stage = 0
+stage = 3
 
 # open db
 assign_db = 'store/patents.db'
@@ -52,18 +52,17 @@ if stage <= 3:
   print 'Merging assignments and patents'
 
   # merge assignments with patents
-  cur.execute("""create table assignment2 (assign_id int primary key asc, patnum int, filedate text, grantdate text, classone int, classtwo int, execdate text, recdate text, conveyance text, assignor text, assignee text)""")
-  cur.execute("""insert into assignment2 (patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance,assignor,assignee) select assignment.patnum,patent.filedate,patent.grantdate,patent.classone,patent.classtwo,assignment.execdate,assignment.recdate,assignment.conveyance,assignment.assignor,assignment.assignee from assignment left outer join patent on assignment.patnum = patent.patnum""")
-  cur.execute("""drop table assignment""")
-  cur.execute("""alter table assignment2 rename to assignment""")
-  cur.execute("""delete from assignment where filedate is null or grantdate is null""")
+  cur.execute("""drop table if exists assignment_pat""")
+  cur.execute("""create table assignment_pat (assignid integer primary key asc, patnum int, filedate text, grantdate text, classone int, classtwo int, execdate text, recdate text, conveyance text, assignor text, assignee text, dup_flag int default 0)""")
+  cur.execute("""insert into assignment_pat (patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance,assignor,assignee) select assignment.patnum,patent.filedate,patent.grantdate,patent.classone,patent.classtwo,assignment.execdate,assignment.recdate,assignment.conveyance,assignment.assignor,assignment.assignee from assignment left outer join patent on assignment.patnum = patent.patnum""")
+  cur.execute("""delete from assignment_pat where filedate is null or grantdate is null or execdate=''""")
 
 if stage <= 4:
   print 'Selecting only valid patents'
 
+  cur.execute("""drop table if exists patent_use""")
   cur.execute("""create table patent_use as select * from patent where owner!=''""")
 
 # close db
 conn.commit()
 conn.close()
-
