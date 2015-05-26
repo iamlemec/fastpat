@@ -26,14 +26,12 @@ if run_flags[0]:
     print 'Loading data'
 
     # load firm data
-    con = sqlite3.connect('store/within.db')
-    con_cites = sqlite3.connect('store/citations.db')
-    datf_idx = sqlio.read_frame('select * from firmyear_index',con)
-    firm_info = sqlio.read_frame('select * from firm_life',con)
-    trans_info = sqlio.read_frame('select * from assign_info',con)
-    firm_cite_year = sqlio.read_frame('select * from firm_cite_year',con_cites)
+    con = sqlite3.connect('store/patents.db')
+    datf_idx = sqlio.read_sql('select * from firmyear_index',con)
+    firm_info = sqlio.read_sql('select * from firm_life',con)
+    trans_info = sqlio.read_sql('select * from assignment_info where execyear!=\'\'',con)
+    firm_cite_year = sqlio.read_sql('select * from firm_cite_year',con)
     con.close()
-    con_cites.close()
 
 if run_flags[1]:
     # calculate transfer statistics

@@ -229,6 +229,7 @@ if run_flags[3]:
     trans_merge = trans_merge.rename(columns=dict([(s,s+'_source') for s in ['firm_num']+trans_cols]))
 
     # three groups - no_match(0),match_small(1),match_large(2)
+    # unmatched firm number means the firm has no grants
     trans_merge['size_bin_source'] += 1
     trans_merge['size_bin_dest'] += 1
     trans_merge['age_bin_source'] += 1
