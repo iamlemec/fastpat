@@ -58,3 +58,7 @@ Parse patent grant and assignment info from USPTO and match with Compustat data.
 * other_files:
   * naics_co09.csv: concordance between US Patent Classes (USPC) and NAICS codes
   * sic_co08.csv: concordance between USPC and SIC codes
+
+## TODO
+
+* Clean out remaining individual initial assignees

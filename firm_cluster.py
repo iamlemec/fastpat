@@ -1,19 +1,20 @@
 # name matching using locally sensitive hashing (simhash)
-# Simhash ported from Liang Sun (2013)
+# this is python3
 
-from itertools import chain, izip, imap, ifilter, repeat
+from itertools import chain, repeat
 from collections import defaultdict
-import operator as op
-
-import re
-import sqlite3
 from math import ceil
-from scipy.stats import itemfreq
 
+import sqlite3
 import numpy as np
-from hashlib import md5
-from distance.cdistance import levenshtein
 import networkx as nx
+try:
+    from distance.cdistance import levenshtein
+except:
+    from distance import levenshtein
+
+from name_standardize import name_standardize_weak, name_standardize_strong
+import simhash as sh
 
 #
 # globals
@@ -22,106 +23,12 @@ import networkx as nx
 db_fname = 'store/patents.db'
 
 #
-# weak name standardization
-#
-
-# regular expression substitutions
-paren = r"'S|\(.*\)|\."
-punct = r"[^\w\s]"
-space = r"[ ]{2,}"
-
-paren_re = re.compile(paren)
-punct_re = re.compile(punct)
-space_re = re.compile(space)
-
-# standardize firm name
-def name_standardize(name):
-    name_strip = name
-    name_strip = paren_re.sub(' ',name_strip)
-    name_strip = punct_re.sub(' ',name_strip)
-    name_strip = space_re.sub(' ',name_strip)
-    name_strip = name_strip.strip()
-    return name_strip
-
-#
-# locally sensitive hashing code
-#
-
-def hashfunc(x):
-    return int(md5(x).hexdigest(),16)
-
-# k-shingles: pairs of adjacent k-length substrings (in order)
-def shingle(s, k=2):
-    """Generate k-length shingles of string s."""
-    k = min(len(s), k)
-    for i in range(len(s) - k + 1):
-        yield s[i:i+k]
-
-class Simhash:
-    # dim is the simhash width, k is the tolerance
-    def __init__(self, dim=64, k=3, thresh=1):
-        self.dim = dim
-        self.k = k
-        self.thresh = thresh
-
-        self.unions = []
-
-        self.hashmaps = [defaultdict(list) for _ in range(k+1)] # defaultdict(list)
-        self.masks = [1 << i for i in range(dim)]
-
-        self.offsets = [self.dim // self.k * i for i in range(self.k)]
-        self.bin_masks = [(i == len(self.offsets) - 1 and 2 ** (self.dim - offset) - 1 or 2 ** (self.offsets[i+1]-offset) - 1) for (i,offset) in enumerate(self.offsets)]
-
-    # add item to the cluster
-    def add(self, item, weights=None, label=None):
-        # Ensure label for this item
-        if label is None:
-            label = item
-
-        # get simhash signature
-        simhash = self.sign(item,weights)
-        keyvec = self.get_keys(simhash)
-
-        # Unite labels with the same keys in the same band
-        matches = defaultdict(int)
-        for idx, key in enumerate(keyvec):
-            others = self.hashmaps[idx][key]
-            for l in others:
-                matches[l] += 1
-            others.append(label)
-        for out, val in matches.iteritems():
-           if val > self.thresh:
-               self.unions.append((label,out))
-
-    # compute actual simhash
-    def sign(self, features, weights):
-        if weights is None:
-            weights = [1.0]*len(features)
-        hashs = map(hashfunc,features)
-        v = [0.0]*self.dim
-        for (h,w) in izip(hashs,weights):
-            for i in xrange(self.dim):
-                v[i] += w if h & self.masks[i] else -w
-        ans = 0
-        for i in xrange(self.dim):
-            if v[i] >= 0:
-                ans |= self.masks[i]
-        return ans
-
-    # bin simhash into chunks
-    def get_keys(self, simhash):
-        return [simhash >> offset & mask for (offset,mask) in zip(self.offsets,self.bin_masks)]
-
-#
 # data processing routines
 #
 
 # white magic
-def autodb(fname):
+def autodb(fname,has_con=True,has_cur=True):
     def wrap(f):
-        fvars = f.func_code.co_varnames
-        has_con = 'con' in fvars
-        has_cur = 'cur' in fvars
         if has_con or has_cur:
             def f1(*args,**kwargs):
                 con = sqlite3.connect(fname)
@@ -146,19 +53,19 @@ def generate_names(con,cur):
     cur.execute('drop table if exists compustat_std')
     cur.execute('create table compustat_std (gvkey int, year int, namestd text)')
     ret = cur.execute('select gvkey,year,name from compustat')
-    cur.executemany('insert into compustat_std values (?,?,?)',map(lambda (gvkey,year,owner): (gvkey,year,name_standardize(owner)),ret))
+    cur.executemany('insert into compustat_std values (?,?,?)',[(gvkey,year,name_standardize_weak(owner)) for (gvkey,year,owner) in ret])
 
     # standardize patent names
     cur.execute('drop table if exists patent_std')
     cur.execute('create table patent_std (patnum int, namestd int)')
     ret = cur.execute('select patnum,owner from patent_use')
-    cur.executemany('insert into patent_std values (?,?)',map(lambda (patnum,owner): (patnum,name_standardize(owner)),ret))
+    cur.executemany('insert into patent_std values (?,?)',[(patnum,name_standardize_weak(owner)) for (patnum,owner) in ret])
 
     # standardize assignment names
     cur.execute('drop table if exists assignment_std')
     cur.execute('create table assignment_std (assignid int, assigneestd int, assignorstd)')
     ret = cur.execute('select assignid,assignor,assignee from assignment_use')
-    cur.executemany('insert into assignment_std values (?,?,?)',map(lambda (assignid,assignor,assignee): (assignid,name_standardize(assignor),name_standardize(assignee)),ret))
+    cur.executemany('insert into assignment_std values (?,?,?)',[(assignid,name_standardize_weak(assignor),name_standardize(assignee)) for (assignid,assignor,assignee) in ret])
 
     # store unique names
     cur.execute('drop table if exists owner')
@@ -190,9 +97,9 @@ def generate_names(con,cur):
 # k = 8, thresh = 4 works well
 @autodb(db_fname)
 def owner_cluster(con,cur,nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
-    c = Simhash(**kwargs)
+    c = sh.Simhash(**kwargs)
 
-    cmd = 'select ownerid,name from owner'
+    cmd = 'select ownerid,name from owner where name like \'%samsung%\''
     if reverse:
         cmd += ' order by rowid desc'
     if nitem:
@@ -210,19 +117,19 @@ def owner_cluster(con,cur,nitem=None,reverse=True,nshingle=2,store=False,**kwarg
         name_dict[ownerid] = name
 
         if i%10000 == 0:
-            print i
+            print(i)
 
     ipairs = c.unions
-    npairs = map(lambda p: map(name_dict.get,p),ipairs)
-    print 'Found %i pairs' % len(ipairs)
+    npairs = [(name_dict[i1],name_dict[i2]) for (i1,i2) in ipairs]
+    print('Found %i pairs' % len(ipairs))
 
     if store:
         cur.execute('drop table if exists pair')
         cur.execute('create table pair (ownerid1 int, ownerid2 int, name1 text, name2 text)')
-        cur.executemany('insert into pair values (?,?,?,?)',imap(lambda ((o1,o2),(n1,n2)): (o1,o2,n1,n2),izip(ipairs,npairs)))
+        cur.executemany('insert into pair values (?,?,?,?)',[(o1,o2,n1,n2) for ((o1,o2),(n1,n2)) in zip(ipairs,npairs)])
         con.commit()
     else:
-        return ipairs
+        return (ipairs,npairs)
 
 # compute distances on owners in same cluster
 @autodb(db_fname)
@@ -232,9 +139,32 @@ def find_components(con,cur,thresh=0.85,store=False):
     def dmetr(name1,name2):
         maxlen = max(len(name1),len(name2))
         ldist = levenshtein(name1,name2,max_dist=int(ceil(maxlen*(1.0-thresh))))
-        return 1.0 - float(ldist)/maxlen if ldist != -1 else 0.0
-    dists = map(lambda (o1,o2,n1,n2): (o1,o2,dmetr(n1,n2)),cur.execute(cmd))
-    close = map(op.itemgetter(0,1),filter(lambda (o1,o2,d): d > thresh,dists))
+        return (1.0 - float(ldist)/maxlen) if (ldist != -1 and maxlen != 0) else 0.0
+
+    dists = []
+    close = []
+    name_dict = {}
+    name_std = {}
+
+    for (o1,o2,n1,n2) in cur.execute(cmd):
+        if o1 not in name_dict:
+            n1s = name_standardize_strong(n1)
+            name_dict[o1] = n1
+            name_std[o1] = n1s
+        else:
+            n1s = name_std[o1]
+        if o2 not in name_dict:
+            n2s = name_standardize_strong(n2)
+            name_dict[o2] = n2
+            name_std[o2] = n2s
+        else:
+            n2s = name_std[o2]
+
+        d = dmetr(n1s,n2s)
+
+        dists.append((o1,o2,d))
+        if d > thresh:
+            close.append((o1,o2))
 
     G = nx.Graph()
     G.add_edges_from(close)
@@ -243,10 +173,11 @@ def find_components(con,cur,thresh=0.85,store=False):
     if store:
         cur.execute('drop table if exists component')
         cur.execute('create table component (compid int, ownerid int)')
-        cur.executemany('insert into component values (?,?)',chain(*[izip(repeat(cid),comp) for (cid,comp) in enumerate(comps)]))
+        cur.executemany('insert into component values (?,?)',chain(*[zip(repeat(cid),comp) for (cid,comp) in enumerate(comps)]))
         con.commit()
     else:
-        return comps
+        comp_names = [[name_std[id] for id in ids] for ids in comps]
+        return comp_names
 
 # must be less than 1000000 components
 @autodb(db_fname)
@@ -291,5 +222,3 @@ def merge_components(con,cur):
 @autodb(db_fname)
 def get_names(con,cur,olist=[]):
     return cur.execute('select * from owner where ownerid in (%s)' % ','.join(map(str,olist))).fetchall()
-
-# add in a few corp reductions, esp kabushiki kaisha
