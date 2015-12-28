@@ -99,7 +99,7 @@ def generate_names(con,cur):
 def owner_cluster(con,cur,nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
     c = sh.Simhash(**kwargs)
 
-    cmd = 'select ownerid,name from owner where name like \'%samsung%\''
+    cmd = 'select ownerid,name from owner'
     if reverse:
         cmd += ' order by rowid desc'
     if nitem:
