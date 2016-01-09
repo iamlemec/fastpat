@@ -4,6 +4,7 @@
 # select firm_num,sum(revenue) as rtot from firm_merge where firm_num>=1000000 group by firm_num order by rtot desc
 # select firm_num,sum(amount) as atot from firm_merge where firm_num>=2000000 group by firm_num order by atot desc
 
+import os
 import operator as op
 from collections import OrderedDict
 import numpy as np
@@ -22,9 +23,9 @@ def argsort(seq):
 
 class infobot:
   def __init__(self):
-    self.con = sqlite3.connect('/media/Liquid/data/patents/store/within.db')
+    self.con = sqlite3.connect('/Users/doug/work/patents/store/patents.db')
     self.cur = self.con.cursor()
-    self.cur.execute('attach ? as citedb',('store/citations.db',))
+    #self.cur.execute('attach ? as citedb',('store/citations.db',))
 
   def disconnect(self):
     self.con.close()
@@ -36,8 +37,8 @@ class infobot:
     # get relevant tokens
     toks = map(op.itemgetter(0),cur.execute('select tok from firm_token where firm_num=?',(fnum,)).fetchall())
     ntoks = len(toks)
-    print 'Looking up: ' + ' '.join(toks)
-    print
+    print('Looking up: ' + ' '.join(toks))
+    print('')
 
     # clear temporary tables
     cur.execute('create table if not exists temp_match (firm_num int, ntoks int)')
@@ -52,7 +53,7 @@ class infobot:
 
     # display matches
     for (fn,score) in fmatch[:nshow]:
-      print '{:8.5f}: '.format(score) + ' '.join(map(op.itemgetter(0),cur.execute('select tok from firm_token where firm_num=?',(fn,)).fetchall()))
+      print('{:8.5f}: '.format(score) + ' '.join(map(op.itemgetter(0),cur.execute('select tok from firm_token where firm_num=?',(fn,)).fetchall())))
 
   def search_token(self,tok,getpats=True,limit=20):
     cur = self.cur
@@ -67,11 +68,11 @@ class infobot:
       pats = [0]*len(fnums)
 
     # output
-    print 'Looking up {}:'.format(tok)
-    print
-    print '\n'.join(['{:10d},{:10d}: {}'.format(num,pnum,name) for (num,name,pnum) in zip(fnums,fnames,pats)])
-    print
-    print '{} matches'.format(len(fnums))
+    print('Looking up {}:'.format(tok))
+    print('')
+    print('\n'.join(['{:10d},{:10d}: {}'.format(num,pnum,name) for (num,name,pnum) in zip(fnums,fnames,pats)]))
+    print('')
+    print('{} matches'.format(len(fnums)))
 
   def firm_history(self,fnum):
     cur = self.cur
@@ -120,10 +121,10 @@ class infobot:
     mean_pos = cur.execute('select avg(pos) from firm_token where tok=?',(tok,)).fetchone()[0]
 
     # output
-    print 'Looking up {}:'.format(tok)
-    print
-    print '{:8d} instances'.format(count)
-    print '{:8.5f} mean position'.format(mean_pos)
+    print('Looking up {}:'.format(tok))
+    print('')
+    print('{:8d} instances'.format(count))
+    print('{:8.5f} mean position'.format(mean_pos))
 
   def firm_names(self,fnums,output=False):
     cur = self.cur
@@ -138,7 +139,7 @@ class infobot:
 
     if output:
       for (fnum,name) in fnames:
-        print '{:8d}: {:s}'.format(fnum,name)
+        print('{:8d}: {:s}'.format(fnum,name))
 
     return fnames
 
@@ -147,7 +148,7 @@ class infobot:
 
     ret = cur.execute('select firm_num,file from firmyear_info where year=? and ? is not null order by ? desc limit ?',(year,col,col,num)).fetchall()
 
-    print ret
+    print(ret)
 
   def interesting_transfers(self,min_year=0,max_year=np.inf,cite_before_min=0,cite_after_min=0,num_select=10,dest_fnum=None):
     cur = self.cur
@@ -160,7 +161,7 @@ class infobot:
     for (patnum,source_fn,dest_fn,ncites_before,ncites_after) in ret:
       (source_name,) = cur.execute('select name from firm where firm_num=?',(source_fn,)).fetchone()
       (dest_name,) = cur.execute('select name from firm where firm_num=?',(dest_fn,)).fetchone()
-      print '{:10d} ({:3d},{:3d}): {:40.40s} -> {:40.40s}'.format(patnum,int(ncites_before),int(ncites_after),source_name,dest_name)
+      print('{:10d} ({:3d},{:3d}): {:40.40s} -> {:40.40s}'.format(patnum,int(ncites_before),int(ncites_after),source_name,dest_name))
 
   def interesting_expires(self,min_year=0,max_year=np.inf,cite_before_min=0,expire_min=8,expire_max=12,num_select=10,fnum=None):
     cur = self.cur
@@ -171,4 +172,21 @@ class infobot:
       ret = [ret[i] for i in np.random.randint(0,len(ret),size=num_select)]
     for (patnum,firm_num,fileyear,ncites_before,life_grant) in ret:
       (firm_name,) = cur.execute('select name from firm where firm_num=?',(firm_num,)).fetchone()
-      print '{:10d} ({:3d},{:3d}): {:40.40s}'.format(patnum,int(ncites_before),int(life_grant),firm_name)
+      print('{:10d} ({:3d},{:3d}): {:40.40s}'.format(patnum,int(ncites_before),int(life_grant),firm_name))
+
+  def search_owners(self,fstr):
+    cur = self.cur
+
+    ret = cur.execute('select * from owner where name like \'%' + fstr + '%\'').fetchall()
+
+    return list(ret)
+
+  def component_info(self,cid=None,fid=None):
+    cur = self.cur
+
+    if cid is None:
+      (cid,) = cur.execute('select compid from component where ownerid=?',(fid,)).fetchone()
+
+    names = cur.execute('select * from (select * from component where compid=?) natural join owner',(cid,)).fetchall()
+
+    return list(names)
