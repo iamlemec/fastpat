@@ -4,7 +4,7 @@ import os
 import sys
 
 grant_dir = 'grant_files'
-cmd_fmt = 'pypy parse_grants_gen{}.py grant_files/{} 1'
+cmd_fmt = 'python3 parse_grants_gen{}.py grant_files/{} 1'
 
 # collect files names for each gen
 gen1_files = []
@@ -30,34 +30,38 @@ gen2_files.sort()
 gen3_files.sort()
 
 # get already parsed files
+parsed = os.path.join(grant_dir,'parsed.txt')
 if has_parsed:
-  parsed_fnames = filter(len,map(str.strip,list(open('grant_files/parsed.txt'))))
+  parsed_fnames = filter(len,map(str.strip,list(open(parsed))))
 else:
   parsed_fnames = []
-parsed_fid = open('grant_files/parsed.txt','a+')
+parsed_fid = open(parsed,'a+')
 
 # execute
 failed_fnames = []
 def parse_gen(fname,gen):
-  print '{}: gen {}'.format(fname,gen)
+  print('{}: gen {}'.format(fname,gen))
   if fname in parsed_fnames:
-    print 'Already parsed'
+    print('Already parsed')
   else:
     cmd = cmd_fmt.format(gen,fname)
     ret = os.system(cmd)
     if ret == 0:
-      print 'SUCCESS'
+      print('SUCCESS')
       parsed_fid.write(fname+'\n')
+    elif ret == 2:
+      print('ABORTED')
+      sys.exit(0)
     else:
-      print 'FAILED'
+      print('FAILED')
       failed_fnames.append(fname)
-  print
+  print('')
 
 for f in gen1_files: parse_gen(f,1)
 for f in gen2_files: parse_gen(f,2)
 for f in gen3_files: parse_gen(f,3)
 
 if len(failed_fnames):
-  print
-  print 'FAILED FILES:'
-  print '\n'.join(failed_fnames)
+  print('')
+  print('FAILED FILES:')
+  print('\n'.join(failed_fnames))

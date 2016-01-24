@@ -1,5 +1,6 @@
 # name matching using locally sensitive hashing (simhash)
 # this is python3
+# these are mostly idempotent
 
 from itertools import chain, repeat
 from collections import defaultdict
@@ -32,15 +33,17 @@ def autodb(fname,has_con=True,has_cur=True):
         if has_con or has_cur:
             def f1(*args,**kwargs):
                 con = sqlite3.connect(fname)
-                if has_cur:
-                    cur = con.cursor()
-                    if has_con:
-                        ret = f(con=con,cur=cur,*args,**kwargs)
+                try:
+                    if has_cur:
+                        cur = con.cursor()
+                        if has_con:
+                            ret = f(con=con,cur=cur,*args[2:],**kwargs)
+                        else:
+                            ret = f(cur=cur,*args[1:],**kwargs)
                     else:
-                        ret = f(cur=cur,*args,**kwargs)
-                else:
-                    ret = f(con=con,*args,**kwargs)
-                con.close()
+                        ret = f(con=con,*args,**kwargs)
+                finally:
+                    con.close()
                 return ret
             return f1
         else:
@@ -65,7 +68,7 @@ def generate_names(con,cur):
     cur.execute('drop table if exists assignment_std')
     cur.execute('create table assignment_std (assignid int, assigneestd int, assignorstd)')
     ret = cur.execute('select assignid,assignor,assignee from assignment_use')
-    cur.executemany('insert into assignment_std values (?,?,?)',[(assignid,name_standardize_weak(assignor),name_standardize(assignee)) for (assignid,assignor,assignee) in ret])
+    cur.executemany('insert into assignment_std values (?,?,?)',[(assignid,name_standardize_weak(assignor),name_standardize_weak(assignee)) for (assignid,assignor,assignee) in ret])
 
     # store unique names
     cur.execute('drop table if exists owner')
@@ -97,7 +100,7 @@ def generate_names(con,cur):
 # k = 8, thresh = 4 works well
 @autodb(db_fname)
 def owner_cluster(con,cur,nitem=None,reverse=True,nshingle=2,store=False,**kwargs):
-    c = sh.Simhash(**kwargs)
+    c = sh.Cluster(**kwargs)
 
     cmd = 'select ownerid,name from owner'
     if reverse:
@@ -108,7 +111,7 @@ def owner_cluster(con,cur,nitem=None,reverse=True,nshingle=2,store=False,**kwarg
     name_dict = {}
     for (i,(ownerid,name)) in enumerate(cur.execute(cmd)):
         words = name.split()
-        shings = list(shingle(name,nshingle))
+        shings = list(sh.shingle(name,nshingle))
 
         features = shings + words
         weights = list(np.linspace(1.0,0.0,len(shings))) + list(np.linspace(1.0,0.0,len(words)))
@@ -206,12 +209,13 @@ def merge_components(con,cur):
 
     # aggregate to yearly
     cur.execute('drop table if exists patent_basic')
-    cur.execute('create table patent_basic (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int)')
-    cur.execute('insert into patent_basic select patnum,firm_num,strftime(\'%Y\',filedate),strftime(\'%Y\',grantdate),classone,classtwo from patent_merge')
+    cur.execute('create table patent_basic (patnum integer primary key, firm_num int, fileyear int, grantyear int, state text, country text, classone int, classtwo int)')
+    cur.execute('insert into patent_basic select patnum,firm_num,substr(filedate,1,4),substr(grantdate,1,4),state,country,classone,classtwo from patent_merge')
+    cur.execute('create unique index patent_basic_idx on patent_basic(patnum)')
 
     cur.execute('drop table if exists assignment_info')
-    cur.execute('create table assignment_info (assignid int primary key, patnum int, source_fn int, dest_fn int, execyear int, recyear int, grantyear int, fileyear int, classone int, classtwo int)')
-    cur.execute('insert into assignment_info select assignid,patnum,source_fn,dest_fn,substr(execdate,1,4),substr(recdate,1,4),strftime(\'%Y\',grantdate),strftime(\'%Y\',filedate),classone,classtwo from assignment_merge')
+    cur.execute('create table assignment_info (assignid integer primary key, patnum int, source_fn int, dest_fn int, execyear int, recyear int, state text, country text)')
+    cur.execute('insert into assignment_info select assignid,patnum,source_fn,dest_fn,substr(execdate,1,4),substr(recdate,1,4),assignee_state,assignee_country from assignment_merge')
 
     cur.execute('drop table if exists assignment_bulk')
     cur.execute('create table assignment_bulk (source_fn int, dest_fn int, execyear int, ntrans int)')
@@ -221,4 +225,9 @@ def merge_components(con,cur):
 
 @autodb(db_fname)
 def get_names(con,cur,olist=[]):
-    return cur.execute('select * from owner where ownerid in (%s)' % ','.join(map(str,olist))).fetchall()
+    return cur.execute('select * from owner where ownerid in (%s)' % ','.join([str(o) for o in olist])).fetchall()
+
+@autodb(db_fname)
+def get_component(con,cur,compid=0):
+    owners = [x for (x,) in cur.execute('select ownerid from component where compid=?',(compid,)).fetchall()]
+    return cur.execute('select * from owner where ownerid in (%s)' % ','.join([str(o) for o in owners])).fetchall()

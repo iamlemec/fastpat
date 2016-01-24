@@ -1,11 +1,11 @@
-#!/usr/bin/python
+#!/bin/env python3
 
 import sys
 import sqlite3
 
 # handle arguments
 if len(sys.argv) <= 1:
-  print 'Usage: parse_grants_gen1.py filename store_db'
+  print('Usage: parse_grants_gen1.py filename store_db')
   sys.exit(0)
 
 in_fname = sys.argv[1]
@@ -20,12 +20,12 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, city text, country text, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, state text, country text, owner text)")
   except sqlite3.OperationalError as e:
-    print e
+    print(e)
 
 # store for batch commit
-batch_size = 1000
+batch_size = 100
 patents = []
 
 def commitBatch():
@@ -54,7 +54,7 @@ class GrantHandler:
       self.file_date = ''
       self.grant_date = ''
       self.country = ''
-      self.city = ''
+      self.state = ''
       self.orgname = ''
       self.class_one = ''
       self.class_two = ''
@@ -70,9 +70,9 @@ class GrantHandler:
     elif name == 'CNT':
       if self.section == 'ASSG':
         self.country = text
-    elif name == 'CTY':
+    elif name == 'STA':
       if self.section == 'ASSG':
-        self.city = text
+        self.state = text
     elif name == 'NAM':
       if self.section == 'ASSG':
         self.orgname = text
@@ -93,13 +93,13 @@ class GrantHandler:
     self.class_two = self.class_str[3:6].strip()
     self.ipc_ver = 'GEN1'
     self.ipc_code = self.ipc_str[:4] + self.ipc_str[4:7].strip() + '/' + self.ipc_str[7:].strip()
-    self.country = self.country[:2] if self.country else 'US'
-    self.city = self.city.strip().upper()
-    self.orgname_esc = self.orgname.decode('utf-8','replace').upper()
+    self.country = self.country[:2] if self.country else ''
+    self.state = self.state.strip()
+    self.orgname_esc = self.orgname.upper()
 
-    if not store_db: print '{:.8} {} {} {:3} {:3} {:3} {:12.12} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc)
+    if not store_db: print('{:.8} {} {} {:3} {:3} {:3} {:12.12} {:3} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.state,self.country,self.orgname_esc))
 
-    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname_esc))
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.state,self.country,self.orgname_esc))
     if len(patents) == batch_size:
       commitBatch()
 
@@ -112,7 +112,7 @@ class ParserGen1:
     self.handler = handler
 
   def parse(self,fname):
-    fid = open(fname)
+    fid = open(fname,encoding='ISO-8859-1')
     for line in fid:
       line = line[:-1]
 
@@ -140,6 +140,4 @@ if store_db:
   cur.close()
   conn.close()
 
-print grant_handler.completed
-
-
+print(grant_handler.completed)

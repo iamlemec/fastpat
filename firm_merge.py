@@ -17,28 +17,39 @@ cur = con.cursor()
 
 if stage <= 0:
   # merge year data
-  print 'Merging with patent data'
+  print('Merging with patent data')
+
+  cur.execute('drop table if exists patent_trans')
+  cur.execute('create table patent_trans (patnum int, first_trans int, ntrans int)')
+  cur.execute('insert into patent_trans select patnum,min(execyear),count(*) from assignment_info group by patnum')
+  cur.execute('create unique index patent_trans_idx on patent_trans(patnum)')
 
   cur.execute('drop table if exists patent_info')
-  cur.execute('create table patent_info (patnum int primary key, firm_num int, fileyear int, grantyear int, classone int, classtwo int, high_tech int, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, life_grant int, life_file int, expryear int)')
-  cur.execute("""insert into patent_info select patent_basic.patnum,firm_num,fileyear,grantyear,classone,classtwo,0,num_trans.first_trans,num_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.life_span,0,0 from patent_basic
-                 left outer join (select patnum,min(strftime('%Y',execdate)) as first_trans,count(*) as ntrans from assignment_use group by patnum) as num_trans on (patent_basic.patnum = num_trans.patnum)
+  cur.execute('create table patent_info (patnum integer primary key, firm_num int, fileyear int, grantyear int, state text, country text, classone int, classtwo int, high_tech int, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, last_maint int, life_grant int, life_file int, expryear int)')
+  cur.execute("""insert into patent_info select patent_basic.patnum,firm_num,fileyear,grantyear,state,country,classone,classtwo,0,patent_trans.first_trans,patent_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.last_maint,0,0,0 from patent_basic
+                 left outer join patent_trans on (patent_basic.patnum = patent_trans.patnum)
                  left outer join maint on (patent_basic.patnum = maint.patnum)
                  left outer join cite_stats on (patent_basic.patnum = cite_stats.patnum)""")
+
   cur.execute('update patent_info set ntrans=0 where ntrans is null')
   cur.execute('update patent_info set n_cited=0 where n_cited is null')
   cur.execute('update patent_info set n_self_cited=0 where n_self_cited is null')
   cur.execute('update patent_info set n_citing=0 where n_citing is null')
-  cur.execute('update patent_info set life_grant=4 where life_grant is null')
+
+  cur.execute('update patent_info set life_grant=8 where last_maint=4')
+  cur.execute('update patent_info set life_grant=12 where last_maint=8')
+  cur.execute('update patent_info set life_grant=17 where last_maint=12 and grantyear<1974')
+  cur.execute('update patent_info set life_grant=20 where last_maint=12 and grantyear>=1974')
+  cur.execute('update patent_info set life_grant=4 where last_maint is null and grantyear<2011')
   cur.execute('update patent_info set life_file=life_grant+grantyear-fileyear')
   cur.execute('update patent_info set expryear=grantyear+life_grant')
 
-  ht_classes = (340,375,379,701,370,345,353,367,381,382,386,235,361,365,700,708,710,713,714,719,318,706,342,343,455,438,711,716,341,712,705,707,715,717)
-  cur.execute('update patent_info set high_tech=1 where classone in ('+','.join(map(str,ht_classes))+')')
+  ht_classes = [340,375,379,701,370,345,353,367,381,382,386,235,361,365,700,708,710,713,714,719,318,706,342,343,455,438,711,716,341,712,705,707,715,717]
+  cur.execute('update patent_info set high_tech=1 where classone in (%s)' % ','.join([str(cl) for cl in ht_classes]))
 
 if stage <= 1:
   # aggregate by firm-year
-  print 'Aggregating by firm-year'
+  print('Aggregating by firm-year')
 
   cur.execute('drop table if exists source_tot')
   cur.execute('create table source_tot (firm_num int, year int, nbulk int, pnum int)')
@@ -70,7 +81,7 @@ if stage <= 1:
 
 if stage <= 2:
   # merge patent data together
-  print 'Merging fields together'
+  print('Merging fields together')
 
   cur.execute('drop table if exists firmyear_all')
   cur.execute('create table firmyear_all (firm_num int, year int)')
@@ -107,10 +118,10 @@ if stage <= 2:
 
 if stage <= 3:
   # find set of good firm statistics
-  print 'Finding firm statistics'
+  print('Finding firm statistics')
 
   cur.execute('drop table if exists firm_life')
-  cur.execute('create table firm_life (firm_num int primary key, year_min int, year_max int, life_span int)')
+  cur.execute('create table firm_life (firm_num integer primary key, year_min int, year_max int, life_span int)')
   cur.execute('insert into firm_life select firm_num,max(1950,min(year)),min(2012,max(year)),0 from firmyear_info where year>=1950 and (file_pnum>0 or source_pnum>0) group by firm_num order by firm_num')
   cur.execute('update firm_life set life_span=year_max-year_min+1')
 
@@ -138,7 +149,7 @@ if stage <= 3:
   cur.execute('alter table firm_class_mode_2 rename to firm_class_mode')
 
   cur.execute('drop table if exists firm_life_2')
-  cur.execute('create table firm_life_2 (firm_num int primary key, year_min int, year_max int, life_span int, high_tech real, tot_pats int, mode_class int, mode_frac real)')
+  cur.execute('create table firm_life_2 (firm_num integer primary key, year_min int, year_max int, life_span int, high_tech real, tot_pats int, mode_class int, mode_frac real)')
   cur.execute("""insert into firm_life_2 select firm_life.firm_num,year_min,year_max,life_span,high_tech,tot_pats,mode_class,mode_frac from firm_life
                  left outer join firm_hightech on firm_life.firm_num = firm_hightech.firm_num
                  left outer join firm_class_mode on firm_life.firm_num = firm_class_mode.firm_num
@@ -151,7 +162,7 @@ if stage <= 3:
 
 if stage <= 4:
     # construct patent stocks
-    print 'Constructing patent stocks'
+    print('Constructing patent stocks')
 
     # load firm data
     firmyear_info = pd.read_sql('select * from firmyear_info',con)
@@ -163,14 +174,14 @@ if stage <= 4:
     year_max = firm_info['year_max']
     life_span = firm_info['life_span']
     all_fnums = np.array(list(itertools.chain.from_iterable([[fnum]*life for (fnum,life) in zip(fnum_set,life_span)])),dtype=np.int)
-    all_years = np.array(list(itertools.chain.from_iterable([xrange(x,y+1) for (x,y) in zip(year_min,year_max)])),dtype=np.int)
-    fy_all = pd.DataFrame(data={'firm_num': all_fnums, 'year': all_years})
+    all_years = np.array(list(itertools.chain.from_iterable([range(x,y+1) for (x,y) in zip(year_min,year_max)])),dtype=np.int)
+    fy_all = pd.DataFrame(data={'firm_num':all_fnums,'year':all_years})
     datf_idx = fy_all.merge(firmyear_info,how='left',on=['firm_num','year'])
     datf_idx.fillna(value={'file_pnum':0,'grant_pnum':0,'dest_pnum':0,'source_pnum':0,'dest_nbulk':0,'source_nbulk':0},inplace=True)
 
     # merge in overall firm info
     datf_idx = datf_idx.merge(firm_info,how='left',on='firm_num')
-    datf_idx['age'] = datf_idx['year']-datf_idx['year_min']
+    datf_idx['age'] = datf_idx['year'] - datf_idx['year_min']
 
     # aggregate stocks
     datf_idx['patnet'] = datf_idx['file_pnum'] - datf_idx['expire_pnum']

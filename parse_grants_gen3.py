@@ -7,7 +7,7 @@ from parse_grants_common import PathHandler
 
 # handle arguments
 if len(sys.argv) <= 1:
-  print 'Usage: parse_grants_gen3.py filename store_db'
+  print('Usage: parse_grants_gen3.py filename store_db')
   sys.exit(0)
 
 in_fname = sys.argv[1]
@@ -22,9 +22,9 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, city text, country text, owner text)")
+    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, state text, country text, owner text)")
   except sqlite3.OperationalError as e:
-    print e
+    print(e)
 
 # store for batch commit
 batch_size = 1000
@@ -35,15 +35,12 @@ def commitBatch():
     cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?,?)',patents)
   del patents[:]
 
-def forceUpper(s):
-  return s.encode('ascii','ignore').upper()
-
 # SAX hanlder for gen3 patent grants
 class GrantHandler(PathHandler):
   def __init__(self):
     track_keys = ['us-patent-grant','publication-reference','application-reference','doc-number',
                  'classification-national','main-classification','classification-ipcr','ipc-version-indicator',
-                 'section','class','subclass','main-group','subgroup','date','assignee','orgname','country','city']
+                 'section','class','subclass','main-group','subgroup','date','assignee','orgname','country','state']
     start_keys = ['us-patent-grant','classification-ipcr','assignee']
     end_keys = ['us-patent-grant','classification-ipcr','assignee']
     PathHandler.__init__(self,track_keys=track_keys,start_keys=start_keys,end_keys=end_keys)
@@ -61,7 +58,7 @@ class GrantHandler(PathHandler):
 
       self.orgnames = []
       self.countries = []
-      self.cities = []
+      self.states = []
       self.ipc_vers = []
       self.ipc_codes = []
     elif name == 'classification-ipcr':
@@ -70,7 +67,7 @@ class GrantHandler(PathHandler):
     elif name == 'assignee':
       self.orgname = ''
       self.country = ''
-      self.city = ''
+      self.state = ''
 
   def endElement(self,name):
     PathHandler.endElement(self,name)
@@ -84,7 +81,7 @@ class GrantHandler(PathHandler):
     elif name == 'assignee':
       self.orgnames.append(self.orgname)
       self.countries.append(self.country)
-      self.cities.append(self.city)
+      self.states.append(self.state)
 
   def characters(self,content):
     if len(self.path) < 2:
@@ -104,8 +101,8 @@ class GrantHandler(PathHandler):
         self.orgname += content
       elif self.path[-1] == 'country':
         self.country += content
-      elif self.path[-1] == 'city':
-        self.city += content
+      elif self.path[-1] == 'state':
+        self.state += content
     elif self.path[-2] == 'classification-ipcr':
       if self.path[-1] in ['section','class','subclass']:
         self.ipc_code += content
@@ -132,14 +129,15 @@ class GrantHandler(PathHandler):
 
     self.orgname = self.orgnames[0] if self.orgnames else ''
     self.country = self.countries[0] if self.countries else ''
-    self.city = self.cities[0] if self.cities else ''
+    self.state = self.states[0] if self.states else ''
+    if len(self.state):
+      self.country = 'US'
 
-    self.city = forceUpper(self.city)
-    self.orgname = forceUpper(self.orgname)
+    self.orgname = self.orgname.upper()
 
-    if not store_db: print '{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:15} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_codes[0],len(self.ipc_codes),self.city,self.country,self.orgname)
+    if not store_db: print('{:7} {} {} {:3.3} {:3.3} {:9.9} {:3} {:3} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_codes[0],len(self.ipc_codes),self.state,self.country,self.orgname))
 
-    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.city,self.country,self.orgname))
+    patents.append((self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.state,self.country,self.orgname))
     if len(patents) == batch_size:
       commitBatch()
 
@@ -159,4 +157,4 @@ if store_db:
   cur.close()
   conn.close()
 
-print grant_handler.completed
+print(grant_handler.completed)

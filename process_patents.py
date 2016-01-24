@@ -1,21 +1,21 @@
 import sqlite3
 
-stage = 3
+stage = 0
 
 # open db
 assign_db = 'store/patents.db'
-conn = sqlite3.connect(assign_db)
-cur = conn.cursor()
+con = sqlite3.connect(assign_db)
+cur = con.cursor()
 
 if stage <= 0:
-  print 'Creating primary key on patnum'
+  print('Creating primary key on patnum')
 
   # create primary key for patent
   cur.execute("""delete from patent where rowid not in (select min(rowid) from patent group by patnum)""")
   cur.execute("""create unique index patnum_idx on patent (patnum asc)""")
 
 if stage <= 1:
-  print 'Transforming patent dates'
+  print('Transforming patent dates')
 
   # tranform dates
   cur.execute("""update patent set filedate=substr(filedate,1,4)||'-'||substr(filedate,5,2)||'-'||substr(filedate,7,2) where filedate!=''""")
@@ -24,7 +24,7 @@ if stage <= 1:
   cur.execute("""update assignment set recdate=substr(recdate,1,4)||'-'||substr(recdate,5,2)||'-'||substr(recdate,7,2) where recdate!=''""")
 
 if stage <= 2:
-  print 'Fixing errors'
+  print('Fixing errors')
 
   # remove blanks
   cur.execute("""delete from patent where filedate='' or grantdate=''""")
@@ -49,20 +49,11 @@ if stage <= 2:
   cur.execute("""update patent set filedate=date(filedate,'-7200 years') where filedate<'9200-01-01' and filedate>='9100-01-01'""")
 
 if stage <= 3:
-  print 'Merging assignments and patents'
-
-  # merge assignments with patents
-  cur.execute("""drop table if exists assignment_pat""")
-  cur.execute("""create table assignment_pat (assignid integer primary key asc, patnum int, filedate text, grantdate text, classone int, classtwo int, execdate text, recdate text, conveyance text, assignor text, assignee text, dup_flag int default 0)""")
-  cur.execute("""insert into assignment_pat (patnum,filedate,grantdate,classone,classtwo,execdate,recdate,conveyance,assignor,assignee) select assignment.patnum,patent.filedate,patent.grantdate,patent.classone,patent.classtwo,assignment.execdate,assignment.recdate,assignment.conveyance,assignment.assignor,assignment.assignee from assignment left outer join patent on assignment.patnum = patent.patnum""")
-  cur.execute("""delete from assignment_pat where filedate is null or grantdate is null or execdate=''""")
-
-if stage <= 4:
-  print 'Selecting only valid patents'
+  print('Selecting only valid patents')
 
   cur.execute("""drop table if exists patent_use""")
   cur.execute("""create table patent_use as select * from patent where owner!=''""")
 
 # close db
-conn.commit()
-conn.close()
+con.commit()
+con.close()

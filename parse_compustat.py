@@ -7,12 +7,10 @@ con = sqlite3.connect(db_fname)
 cur = con.cursor()
 
 # read frame into memory
-datf = pd.read_csv('compustat_files/comprehensive2_1950.csv',error_bad_lines=False,skiprows=1,
+datf = pd.read_csv('compustat_files/compustat_full.csv',error_bad_lines=False,skiprows=1,
                    names=['gvkey','datadate','year','name','assets','capx','cash','cogs','shares',
                    'deprec','income','employ','intan','debt','prefstock','revenue','sales','rnd',
-                   'fcost','price','naics','sic'])
-datf_mna = pd.read_csv('compustat_files/compustat_mna.csv',error_bad_lines=False,skiprows=1,
-                   names=['gvkey','datadate','year','acquire','acquire_income'])
+                   'fcost','price','naics','sic','acquire','acquire_income'])
 
 # clean up data
 datf['mktval'] = datf['shares']*datf['price']
@@ -20,10 +18,6 @@ datf = datf.drop(['datadate','shares','prefstock','price'],axis=1)
 datf = datf.fillna({'naics':0})
 datf['naics'] = datf['naics'].map(lambda x: int('{:<6.0f}'.format(x).replace(' ','0')))
 datf = datf[~((datf['naics']>=520000)&(datf['naics']<530000))] # remove financial firms
-
-# merge in acquisition data
-datf_mna = datf_mna.drop(['datadate','acquire_income'],axis=1)
-datf = datf.merge(datf_mna,how='left',on=['gvkey','year'])
 
 # write to sql
 datf.to_sql('compustat',con,if_exists='replace')

@@ -1,38 +1,54 @@
-# match citation data with aggregated firm data (to be run before patents_match_merge.py)
+# match citation data with aggregated firm data (to be run before firm_merge.py)
 
 import sqlite3
+import numpy as np
 import pandas as pd
 
 # load in a lot of data
 db_fname = 'store/patents.db'
 con = sqlite3.connect(db_fname)
+cur = con.cursor()
 
-print 'Loading from database'
+print('Loading from database')
 
 datf_cite = pd.read_sql('select citer,citee from citation',con)
 datf_grant = pd.read_sql('select patnum,firm_num,fileyear from patent_basic',con)
 # datf_trans = pd.read_sql('select assignid,patnum,source_fn,dest_fn,execyear from assignment_info',con)
 
-print 'Matching with patents'
+print('Matching with patents')
 
 # match citations to firms with patnum
-datf_cite.rename(columns={'citer':'citer_pnum','citee':'citee_pnum'},inplace=True)
+datf_cite = datf_cite.rename(columns={'citer':'citer_pnum','citee':'citee_pnum'})
 datf_cite = datf_cite.merge(datf_grant,how='left',left_on='citer_pnum',right_on='patnum',suffixes=('','_citer'))
 datf_cite = datf_cite.drop(['patnum'],axis=1).rename(columns={'firm_num':'citer_fnum','fileyear':'cite_year'})
 datf_cite = datf_cite.merge(datf_grant[['patnum','firm_num']],how='left',left_on='citee_pnum',right_on='patnum',suffixes=('','_citee'))
 datf_cite = datf_cite.drop(['patnum'],axis=1).rename(columns={'firm_num':'citee_fnum'})
 datf_cite['self_cite'] = (datf_cite['citer_fnum'] == datf_cite['citee_fnum'])
 
-print 'Aggregating together'
+print('Aggregating together')
 
 # patent level statistics
 n_cited = datf_cite.groupby('citer_pnum').size()
 n_citing = datf_cite.groupby('citee_pnum').size()
 n_self_cited = datf_cite.groupby('citer_pnum')['self_cite'].sum()
-datf_cite_stats = pd.concat([pd.Series(n_cited,name='n_cited'),pd.Series(n_citing,name='n_citing'),pd.Series(n_self_cited,name='n_self_cited')],axis=1).reset_index().rename(columns={'index':'patnum'})
+datf_cite_stats = pd.DataFrame({'n_cited':n_cited,'n_citing':n_citing,'n_self_cited':n_self_cited})
+datf_cite_stats.index.rename('patnum',inplace=True)
+datf_cite_stats = datf_cite_stats.fillna(0).astype(np.int)
+
+print('Writing to database')
+
+# store in sql
+datf_cite_stats.to_sql('cite_stats',con,if_exists='replace')
+cur.execute('create unique index cite_stats_idx on cite_stats(patnum)')
+
+# close out
+con.commit()
+con.close()
+
+## firm level citation stats
 
 # firm level statistics
-datf_cite_year = datf_cite.groupby(['citer_fnum','citee_fnum','cite_year']).size().reset_index(name='ncites')
+# datf_cite_year = datf_cite.groupby(['citer_fnum','citee_fnum','cite_year']).size().reset_index(name='ncites')
 # first_cite_agg = pd.Series(datf_cite_year.groupby(['citer_fnum','citee_fnum'])['cite_year'].min(),name='first_cite')
 # ncites_agg = pd.Series(datf_cite_year.groupby(['citer_fnum','citee_fnum'])['ncites'].sum(),name='ncites')
 # datf_cite_agg = pd.concat([first_cite_agg,ncites_agg],axis=1).reset_index()
@@ -54,15 +70,11 @@ datf_cite_year = datf_cite.groupby(['citer_fnum','citee_fnum','cite_year']).size
 # datf_trans_pat = datf_trans_pat.join(ncites_after,on='assignid')
 # datf_trans_pat = datf_trans_pat.fillna({'ncites_before':0,'ncites_after':0})
 
-print 'Writing to database'
+## patent level citations stats
+
 # save frames back to sql - need to to this one at a time for memory reasons
 # datf_cite.to_sql('firm_cite',con,if_exists='replace')
-# datf_cite_stats.to_sql('cite_stats',con,if_exists='replace')
 # datf_cite_year.to_sql('firm_cite_year',con,if_exists='replace')
 # datf_cite_agg.to_sql('firm_cite_agg',con,if_exists='replace')
 # datf_trans_firm.to_sql('trans_cite_firm',con,if_exists='replace')
 # datf_trans_pat.to_sql('trans_cite_pat',con,if_exists='replace')
-
-# close out
-con.commit()
-con.close()

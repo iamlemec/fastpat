@@ -14,10 +14,10 @@ run_flags = [True,True,True,True,True,True]
 # execution state
 if len(sys.argv) == 1:
   stage_min = 0
-  stage_max = sys.maxint
+  stage_max = sys.maxsize
 elif len(sys.argv) == 2:
   stage_min = int(sys.argv[1])
-  stage_max = sys.maxint
+  stage_max = sys.maxsize
 else:
   stage_min = int(sys.argv[1])
   stage_max = int(sys.argv[2])
@@ -30,7 +30,7 @@ period_len = 5
 top_year = base_year + period_len
 
 if run_flags[0]:
-    print 'Loading data'
+    print('Loading data')
 
     # load firm data
     # firm_life starts a firm when they file for their first patent and ends when they file for their last
@@ -39,7 +39,7 @@ if run_flags[0]:
     firm_info = pd.read_sql('select * from firm_life',con)
     grant_info = pd.read_sql('select * from patent_info',con)
     trans_info = pd.read_sql('select * from assignment_info where execyear!=\'\'',con)
-    firm_cite_year = pd.read_sql('select * from firm_cite_year',con)
+    # firm_cite_year = pd.read_sql('select * from firm_cite_year',con)
     con.close()
 
     # basic stats
@@ -96,7 +96,7 @@ if run_flags[0]:
     datf_idx['age_rank'] = all_year_groups['age'].apply(rankify)
 
 if run_flags[1]:
-    print 'Firm/industry level analysis'
+    print('Firm/industry level analysis')
 
     # data selection parameters
     index_cols = ['firm_num']
@@ -186,7 +186,7 @@ if run_flags[1]:
     firm_totals['pos_acquire'] = firm_totals['acquire'] > 0.0
 
 if run_flags[2]:
-    print 'Firm type breakdowns'
+    print('Firm type breakdowns')
 
     firm_incumbents = firm_totals[~firm_totals['entered']]
 
@@ -218,12 +218,13 @@ if run_flags[2]:
     firm_age_cumsum = firm_age_cumsum.set_index(np.linspace(0.0,1.0,len(firm_age_cumsum)))
 
 if run_flags[3]:
-    print 'Transfer size/age stats'
+    print('Transfer size/age stats')
 
     # merge in transfers
     trans_cols = ['size_bin','age_bin','size_rank','age_rank','stock','age']
     datf_idx_sub = datf_idx[['firm_num','year']+trans_cols]
-    trans_merge = pd.merge(trans_info,datf_idx_sub,how='left',left_on=['dest_fn','execyear'],right_on=['firm_num','year'])
+    trans_merge = pd.merge(trans_info,grant_info[['patnum','classone','classtwo','high_tech','fileyear','grantyear']],how='left',left_on='patnum',right_on='patnum')
+    trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['dest_fn','execyear'],right_on=['firm_num','year'])
     trans_merge = trans_merge.rename(columns=dict([(s,s+'_dest') for s in ['firm_num']+trans_cols]))
     trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['source_fn','execyear'],right_on=['firm_num','year'])
     trans_merge = trans_merge.rename(columns=dict([(s,s+'_source') for s in ['firm_num']+trans_cols]))
@@ -255,24 +256,24 @@ if run_flags[3]:
     firm_info_panel = firm_info[(firm_info['year_max']>=base_year)&(firm_info['year_min']<top_year)]
 
     # panel of all citing firm pairs in year range
-    firm_cite_panel = firm_cite_year[(firm_cite_year['cite_year']>=base_year)&(firm_cite_year['cite_year']<top_year)]
-    firm_cite_merge = firm_cite_panel.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citer_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citer_mode_class'})
-    firm_cite_merge = firm_cite_merge.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citee_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citee_mode_class'})
-    firm_cite_within = firm_cite_merge[firm_cite_merge['citer_mode_class']==firm_cite_merge['citee_mode_class']].drop('citee_mode_class',axis=1).rename(columns={'citer_mode_class':'mode_class'})
+    # firm_cite_panel = firm_cite_year[(firm_cite_year['cite_year']>=base_year)&(firm_cite_year['cite_year']<top_year)]
+    # firm_cite_merge = firm_cite_panel.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citer_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citer_mode_class'})
+    # firm_cite_merge = firm_cite_merge.merge(firm_info[['firm_num','mode_class']],how='left',left_on='citee_fnum',right_on='firm_num').drop('firm_num',axis=1).rename(columns={'mode_class':'citee_mode_class'})
+    # firm_cite_within = firm_cite_merge[firm_cite_merge['citer_mode_class']==firm_cite_merge['citee_mode_class']].drop('citee_mode_class',axis=1).rename(columns={'citer_mode_class':'mode_class'})
 
     # citation rates
-    firm_panel_class_count = firm_info_panel.groupby('mode_class').size()
-    within_cite_class_count = firm_cite_within.groupby('mode_class').size()
-    cite_pair_class_frac = within_cite_class_count.astype(np.float)/(firm_panel_class_count**2)
-    cite_pair_class_agg = within_cite_class_count.sum().astype(np.float)/(firm_panel_class_count**2).sum()
+    # firm_panel_class_count = firm_info_panel.groupby('mode_class').size()
+    # within_cite_class_count = firm_cite_within.groupby('mode_class').size()
+    # cite_pair_class_frac = within_cite_class_count.astype(np.float)/(firm_panel_class_count**2)
+    # cite_pair_class_agg = within_cite_class_count.sum().astype(np.float)/(firm_panel_class_count**2).sum()
 
 if run_flags[4]:
-    print 'Toplevel industry info'
+    print('Toplevel industry info')
 
     grant_class_groups = grant_info.groupby('classone')
     grant_class_born = grant_class_groups['fileyear'].quantile(0.01)
     grant_class_base = pd.DataFrame({'class_born':grant_class_born})
-    grant_class_base['class_age'] = 2013 - grant_class_base['class_born']
+    grant_class_base['class_age'] = base_year - grant_class_base['class_born']
 
     # modal classone group stats
     class_groups = firm_totals.groupby('mode_class')
@@ -337,6 +338,8 @@ if run_flags[4]:
     datf_class = firm_class_info.join(grant_class_info).join(trans_class_means)
 
 if run_flags[5]:
+    print('Aggregate industry stats')
+
     # generate target values
     targ_model = vt.Bundle()
     targ_model['median_markup'] = firm_totals['markup'].median()
