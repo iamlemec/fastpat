@@ -21,7 +21,7 @@ if store_db:
   conn = sqlite3.connect(db_fname)
   cur = conn.cursor()
   try:
-    cur.execute('create table abstract (patnum int, filedate text, full_text text)')
+    cur.execute('create table abstract (patnum int primary key, filedate text, full_text text)')
   except sqlite3.OperationalError as e:
     print e
 else:
@@ -33,7 +33,7 @@ abstracts = []
 
 def commitBatch():
   if store_db:
-    cur.executemany('insert into abstract values (?,?,?)',abstracts)
+    cur.executemany('insert or replace into abstract values (?,?,?)',abstracts)
   del abstracts[:]
 
 def get_text(e):

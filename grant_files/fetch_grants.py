@@ -4,7 +4,7 @@ import os
 import time
 
 grant_fname = 'grant_files.txt'
-grant_url_fmt = 'http://storage.googleapis.com/patents/grantbib/{}/{}'
+grant_url_fmt = 'https://bulkdata.uspto.gov/data2/patent/grant/redbook/fulltext/{}/{}'
 
 url_list = []
 for line in open(grant_fname):
