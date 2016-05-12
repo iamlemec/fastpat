@@ -33,8 +33,9 @@ Parse patent grant and assignment info from USPTO and match with Compustat data.
 ## Workflow
 
 * fetch patent grant files: grant_files/fetch_grants.py
-* fix malformed XML in grant files: grant_files/fix_grants_gen2.py and grant_files/fix_grants_gen3.py
 * fetch patent assignment files: assign_files/fetch_assignments.py
+* unzip XML in grant_files/raw: `ls *.zip | xargs -n 1 unzip`
+* fix malformed XML in grant files: grant_files/fix_grants_gen2.py and grant_files/fix_grants_gen3.py
 * patent grants parse: parse_grants_all.py
 * patent assignments parse: parse_assign_all.py
 * parse compustat: parse_compustat.py

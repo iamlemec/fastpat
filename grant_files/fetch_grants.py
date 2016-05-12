@@ -3,6 +3,7 @@
 import os
 import time
 
+raw_dir = 'raw'
 grant_fname = 'grant_files.txt'
 grant_url_fmt = 'https://bulkdata.uspto.gov/data2/patent/grant/redbook/bibliographic/{}/{}'
 
@@ -24,12 +25,13 @@ for line in open(grant_fname):
     url_list.append((fname,url))
 
 for (fname,url) in sorted(url_list):
-    if os.path.isfile(fname):
+    fpath = os.path.join(raw_dir,fname)
+    if os.path.isfile(fpath):
         print('Skipping {}, already exists'.format(fname))
         print()
     else:
         print('Fetching {}'.format(fname))
-        os.system('curl -o {} {}'.format(fname,url))
+        os.system('curl -o {} {}'.format(fpath,url))
         print()
         time.sleep(10)
 
