@@ -3,7 +3,7 @@
 import os
 import sys
 
-grant_dir = 'grant_files'
+grant_dir = 'grant_files/fixed'
 cmd_fmt = 'python3 parse_grants_gen{}.py grant_files/{} 1'
 
 # collect files names for each gen
