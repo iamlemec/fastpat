@@ -10,32 +10,99 @@ def clear(elem):
 def get_text(elem,default=''):
     return (elem.text if elem.text is not None else default) if elem is not None else default
 
-# demangle file
-def parse_mangled_gen3(fname,handler):
-    pp = etree.XMLPullParser(tag='us-patent-grant', events=['end'])
-    def parse_all():
-        for (_, pat) in pp.read_events():
-            if not handler(pat):
-                return False
-        return True
+def create_patent_table(con):
+    cur = con.cursor()
+    cur.execute('create table if not exists patent (patnum int, filedate text, grantdate text, ipcver text, ipcclass text, ipcgroup, state text, country text, owner text)')
 
-    with open(fname) as f:
-        pp.feed('<root>\n')
-        for line in f:
-            if line.startswith('<?xml'):
-                if not parse_all():
-                    break
-            elif line.startswith('<!DOCTYPE'):
-                pass
+# parser, emulate SAX here
+class ParserGen1:
+  def __init__(self):
+      pass
+
+  def setContentHandler(self,handler):
+      self.handler = handler
+
+  def parse(self,fname):
+      fid = open(fname,encoding='ISO-8859-1')
+      for line in fid:
+          line = line[:-1]
+
+          if len(line) == 0 or line[0] == ' ':
+              continue
+
+          tag = line[:4].strip()
+          text = line[5:]
+
+          if not self.handler.tag(tag.rstrip(),text):
+              break
+
+# demangle file, emulate SAX
+class ParserGen2:
+    def __init__(self):
+        pass
+
+    def setContentHandler(self, handler):
+        self.handler = handler
+
+    def parse(fname):
+        pp = etree.XMLPullParser(tag='PATDOC', events=['end'], recover=True)
+
+        def handle_all():
+            for (_, pat) in pp.read_events():
+                if not handler(pat):
+                    return False
+                clear(pat)
+            return True
+
+        with open(fname) as f:
+            pp.feed('<root>\n')
+            for line in f:
+                if line.startswith('<?xml'):
+                    if not handle_all():
+                        break
+                elif line.startswith('<!DOCTYPE') or line.startswith('<!ENTITY') or line.startswith(']>'):
+                    pass
+                else:
+                    pp.feed(line)
             else:
-                pp.feed(line)
-        else:
-            pp.feed('</root>\n')
-            parse_all()
+                pp.feed('</root>\n')
+                handle_all()
+
+# demangle file
+class ParserGen3:
+    def __init__(self):
+        pass
+
+    def setContentHandler(self, handler):
+        self.handler = handler
+
+    def parse(fname):
+        pp = etree.XMLPullParser(tag='us-patent-grant', events=['end'], recover=True)
+
+        def handle_all():
+            for (_, pat) in pp.read_events():
+                if not self.handler(pat):
+                    return False
+                clear(pat)
+            return True
+
+        with open(fname) as f:
+            pp.feed('<root>\n')
+            for line in f:
+                if line.startswith('<?xml'):
+                    if not handle_all():
+                        break
+                elif line.startswith('<!DOCTYPE'):
+                    pass
+                else:
+                    pp.feed(line)
+            else:
+                pp.feed('</root>\n')
+                handle_all()
 
 # insert in chunks
 class ChunkInserter:
-    def __init__(self,con,table=None,cmd=None,cur=None,chunk_size=1000,output=False):
+    def __init__(self, con, table=None, cmd=None, cur=None, chunk_size=1000, output=False):
         if table is None and cmd is None:
             raise('Must specify either table or cmd')
 
@@ -71,30 +138,9 @@ class ChunkInserter:
         if self.cmd is None:
             nargs = len(self.items[0])
             sign = ','.join(nargs*'?')
-            self.cmd = 'insert into %s values (%s)' % (self.table, sign)
+            self.cmd = 'insert or replace into %s values (%s)' % (self.table, sign)
         if self.output:
-            print('Committing chunk %d (%d)' % (self.i,len(self.items)))
-        self.cur.executemany(self.cmd,self.items)
+            print('Committing chunk %d (%d)' % (self.i, len(self.items)))
+        self.cur.executemany(self.cmd, self.items)
         self.con.commit()
         self.items = []
-
-# SAX handler - track xml path, no attributes
-class PathHandler(handler.ContentHandler):
-  def __init__(self,track_keys=[],start_keys=[],end_keys=[]):
-    self.track_keys = track_keys
-    self.start_keys = start_keys
-    self.end_keys = end_keys
-
-  def startDocument(self):
-    self.path = []
-
-  def endDocument(self):
-    pass
-
-  def startElement(self,name,attrs):
-    if name in self.track_keys:
-      self.path.append(name)
-
-  def endElement(self,name):
-    if name in self.track_keys and self.path and self.path[-1] == name:
-      self.path.pop()

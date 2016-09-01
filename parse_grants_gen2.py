@@ -1,154 +1,76 @@
-#!/usr/bin/python
+# pull in all wikipedia data
 
-import sys
+import argparse
 import sqlite3
-from xml.sax import make_parser, xmlreader
-from parse_grants_common import PathHandler
+from db_tools import ChunkInserter
+from parse_common import create_patent_table, get_text, ParserGen2
 
-# handle arguments
-if len(sys.argv) <= 1:
-  print('Usage: parse_grants_gen2.py filename store_db')
-  sys.exit(0)
+# parse input arguments
+parser = argparse.ArgumentParser(description='Wikipedia indexer.')
+parser.add_argument('fname_in', type=str, help='filename of wikipedia')
+parser.add_argument('fname_db', type=str, help='filename of database')
+parser.add_argument('--limit', type=int, default=None, help='number of articles to parse')
+args = parser.parse_args()
 
-in_fname = sys.argv[1]
-if sys.argv[2] == '1':
-  store_db = True
-else:
-  store_db = False
+# database
+con = sqlite3.connect(args.fname_db)
+create_patent_table(con)
+chunker = ChunkInserter(con, table='patent')
 
-if store_db:
-  # database file
-  db_fname = 'store/patents.db'
-  conn = sqlite3.connect(db_fname)
-  cur = conn.cursor()
-  try:
-    cur.execute("create table patent (patnum int, filedate text, grantdate text, classone int, classtwo int, ipcver text, ipccode text, state text, country text, owner text)")
-  except sqlite3.OperationalError as e:
-    print(e)
+# parse file
+i = 0
+d = 0
+o = 0
+def handle_patent(pat):
+    global i, d, o
 
-# store for batch commit
-batch_size = 1000
-patents = []
+    bib = pat.find('SDOBI')
 
-def commitBatch():
-  if store_db:
-    cur.executemany('insert into patent values (?,?,?,?,?,?,?,?,?,?)',patents)
-  del patents[:]
+    # publication
+    pub = bib.find('B100')
+    patnum = get_text(pub.find('B110/DNUM/PDAT'))
+    if not patnum.startswith('0'):
+        d += 1
+        return True
+    pubdate = get_text(pub.find('B140/DATE/PDAT'))
 
-# XML codes gen2
-# B110 - patent number section (PDAT)
-# B140 - grant date section (PDAT)
-# B220 - issue date section (PDAT)
-# B511 - international patent class (PDAT)
-# B521 - classification section (PDAT)
-# B731 - original assignee name section (name: NAM->PDAT, country: CTRY->PDAT, state: STATE->PDAT)
+    # application
+    app = bib.find('B200')
+    appdate = get_text(app.find('B220/DATE/PDAT'))
 
-# SAX hanlder for gen3 patent grants
-class GrantHandler(PathHandler):
-  def __init__(self):
-    track_keys = ['PATDOC','B110','B140','B220','B511','B521','B731','PDAT','NAM','CTRY','STATE']
-    start_keys = ['PATDOC']
-    end_keys = ['PATDOC']
-    PathHandler.__init__(self,track_keys=track_keys,start_keys=start_keys,end_keys=end_keys)
+    # ipc classification
+    klass = bib.find('B500/B510')
+    ipcstr = get_text(klass.find('B511/PDAT'))
+    ipcver = get_text(klass.find('B516/PDAT'))
+    ipcclass = ipcstr[:4]
+    ipcgroup = ipcstr[4:]
 
-    self.completed = 0
+    # assignment
+    assign = bib.find('B700/B730/B731/PARTY-US')
+    if assign is None:
+        o += 1
+        return True
+    orgname = get_text(assign.find('NAM/ONM/STEXT/PDAT')).upper()
+    if len(orgname) == 0:
+        o += 1
+        return True
+    state = get_text(assign.find('ADR/STATE/PDAT'))
+    country = get_text(assign.find('ADR/CTRY/PDAT'))
 
-  def startElement(self,name,attrs):
-    PathHandler.startElement(self,name,attrs)
+    chunker.insert(patnum, appdate, pubdate, ipcver, ipcclass, ipcgroup, state, country, orgname)
 
-    if name == 'PATDOC':
-      self.patnum = ''
-      self.grant_date = ''
-      self.file_date = ''
-      self.ipc_code = ''
-      self.class_str = ''
-      self.orgnames = []
-      self.countries = []
-      self.states = []
-    elif name == 'B731':
-      self.orgname = ''
-      self.country = ''
-      self.state = ''
+    i += 1
+    if i % 100 == 0:
+        print('%12d: i = %8d, d = %6d, o = %6d, pn = %s, pd = %s, ad = %s, on = %30.30s, st = %2s, ct = %2s, ipcv = %s, ipcc = %s = ipcg = %s' % (pat.sourceline, i, d, o, patnum, pubdate, appdate, orgname, state, country, ipcver, ipcclass, ipcgroup))
+    if args.limit and i >= args.limit:
+        return False
 
-  def endElement(self,name):
-    PathHandler.endElement(self,name)
+    return True
 
-    if name == 'PATDOC':
-      if self.patnum[0] == '0':
-        self.addPatent()
-    elif name == 'B731':
-      self.orgnames.append(self.orgname)
-      self.countries.append(self.country)
-      self.states.append(self.state)
-
-  def characters(self,content):
-    if len(self.path) < 2:
-      return
-
-    if self.path[-2] == 'B110' and self.path[-1] == 'PDAT':
-        self.patnum += content
-    elif self.path[-2] == 'B140' and self.path[-1] == 'PDAT':
-        self.grant_date += content
-    elif self.path[-2] == 'B220' and self.path[-1] == 'PDAT':
-      self.file_date += content
-    elif self.path[-2] == 'B511' and self.path[-1] == 'PDAT':
-        self.ipc_code += content      
-    elif self.path[-2] == 'B521' and self.path[-1] == 'PDAT':
-      self.class_str += content
-
-    if len(self.path) < 3:
-      return
-
-    if self.path[-3] == 'B731':
-      if self.path[-2] == 'NAM' and self.path[-1] == 'PDAT':
-        self.orgname += content
-      elif self.path[-2] == 'CTRY' and self.path[-1] == 'PDAT':
-        self.country += content
-      elif self.path[-2] == 'STATE' and self.path[-1] == 'PDAT':
-        self.state += content
-
-  def addPatent(self):
-    self.completed += 1
-
-    self.patint = self.patnum[1:]
-    self.ipc_ver = 'GEN2'
-    self.ipc_code = self.ipc_code[:4] + self.ipc_code[5:7].strip() + '/' + self.ipc_code[7:].strip()
-    self.class_one = self.class_str[:3].strip()
-    self.class_two = self.class_str[3:6].strip()
-
-    self.orgname = self.orgnames[0] if self.orgnames else ''
-    self.country = self.countries[0] if self.countries else ''
-    self.state = self.states[0] if self.states else ''
-    if len(self.state):
-      self.country = 'US'
-
-    self.orgname = self.orgname.replace('&amp;','&').upper()
-
-    if not store_db: print('{:.8} {} {} {:3} {:3} {:4} {:10} {:3} {:3} {:.30}'.format(self.patint,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.state,self.country,self.orgname))
-
-    patents.append((self.patnum,self.file_date,self.grant_date,self.class_one,self.class_two,self.ipc_ver,self.ipc_code,self.state,self.country,self.orgname))
-    if len(patents) == batch_size:
-      commitBatch()
-
-# do parsing
-grant_handler = GrantHandler()
-
-input_source = xmlreader.InputSource()
-input_source.setEncoding('iso-8859-1')
-input_source.setByteStream(open(in_fname))
-
-parser = make_parser()
-parser.setContentHandler(grant_handler)
-parser.parse(input_source)
-
-# clear out the rest
-if len(patents) > 0:
-  commitBatch()
-
-if store_db:
-  # commit to db and close
-  conn.commit()
-  cur.close()
-  conn.close()
-
-print(grant_handler.completed)
+# do parse
+parser = ParserGen2()
+parser.setContentHandler(handle_patent)
+parser.parse(args.fname_in)
+chunker.commit()
+print(i,d,o)
+print()
