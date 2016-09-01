@@ -11,14 +11,10 @@ from lxml import etree
 from copy import copy
 from collections import OrderedDict
 from itertools import chain
-from parse_common import clear, ChunkInserter
+from parse_common import clear, get_text, ChunkInserter
 from traceback import print_exception
 
 # tools
-def get_text(parent,tag,default=''):
-    child = parent.find(tag)
-    return (child.text or default) if child is not None else default
-
 def gen1_ipc(ipc):
     if len(ipc) >= 8:
         return ipc[:4] + ipc[4:7].lstrip() + '/' + ipc[7:]
@@ -39,6 +35,11 @@ def gen3_ipc(ipcsec):
 
 def raw_text(par,sep=''):
     return sep.join(par.itertext())
+
+def clear(elem):
+    elem.clear()
+    while elem.getprevious() is not None:
+        del elem.getparent()[0]
 
 # parse it up
 def parse_grants_gen1(fname_in, store_patent):
@@ -301,6 +302,7 @@ def store_patent(pat):
 
     return True
 
+# collect files
 if len(args.fname_in) == 0:
     file_list = sorted(glob.glob('grant_files/*.dat')) \
               + sorted(glob.glob('grant_files/pgb*.xml')) \
@@ -308,7 +310,7 @@ if len(args.fname_in) == 0:
 else:
     file_list = args.fname_in
 
-# detect generation
+# parse by generation
 for fpath in file_list:
     (fdir, fname) = os.path.split(fpath)
     if fname.endswith('.dat'):

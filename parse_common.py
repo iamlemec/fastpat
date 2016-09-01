@@ -1,104 +1,15 @@
-from xml.sax import handler
-from lxml import etree
+# common parsing tools
+
+# get descendent text
+def get_text(parent,tag,default=''):
+    child = parent.find(tag)
+    return (child.text or default) if child is not None else default
 
 # preserve memory
 def clear(elem):
     elem.clear()
     while elem.getprevious() is not None:
         del elem.getparent()[0]
-
-def get_text(elem,default=''):
-    return (elem.text if elem.text is not None else default) if elem is not None else default
-
-def create_patent_table(con):
-    cur = con.cursor()
-    cur.execute('create table if not exists patent (patnum int, filedate text, grantdate text, ipcver text, ipcclass text, ipcgroup, state text, country text, owner text)')
-
-# parser, emulate SAX here
-class ParserGen1:
-  def __init__(self):
-      pass
-
-  def setContentHandler(self,handler):
-      self.handler = handler
-
-  def parse(self,fname):
-      fid = open(fname,encoding='ISO-8859-1')
-      for line in fid:
-          line = line[:-1]
-
-          if len(line) == 0 or line[0] == ' ':
-              continue
-
-          tag = line[:4].strip()
-          text = line[5:]
-
-          if not self.handler.tag(tag.rstrip(),text):
-              break
-
-# demangle file, emulate SAX
-class ParserGen2:
-    def __init__(self):
-        pass
-
-    def setContentHandler(self, handler):
-        self.handler = handler
-
-    def parse(fname):
-        pp = etree.XMLPullParser(tag='PATDOC', events=['end'], recover=True)
-
-        def handle_all():
-            for (_, pat) in pp.read_events():
-                if not handler(pat):
-                    return False
-                clear(pat)
-            return True
-
-        with open(fname) as f:
-            pp.feed('<root>\n')
-            for line in f:
-                if line.startswith('<?xml'):
-                    if not handle_all():
-                        break
-                elif line.startswith('<!DOCTYPE') or line.startswith('<!ENTITY') or line.startswith(']>'):
-                    pass
-                else:
-                    pp.feed(line)
-            else:
-                pp.feed('</root>\n')
-                handle_all()
-
-# demangle file
-class ParserGen3:
-    def __init__(self):
-        pass
-
-    def setContentHandler(self, handler):
-        self.handler = handler
-
-    def parse(fname):
-        pp = etree.XMLPullParser(tag='us-patent-grant', events=['end'], recover=True)
-
-        def handle_all():
-            for (_, pat) in pp.read_events():
-                if not self.handler(pat):
-                    return False
-                clear(pat)
-            return True
-
-        with open(fname) as f:
-            pp.feed('<root>\n')
-            for line in f:
-                if line.startswith('<?xml'):
-                    if not handle_all():
-                        break
-                elif line.startswith('<!DOCTYPE'):
-                    pass
-                else:
-                    pp.feed(line)
-            else:
-                pp.feed('</root>\n')
-                handle_all()
 
 # insert in chunks
 class ChunkInserter:
