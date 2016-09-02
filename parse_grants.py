@@ -14,39 +14,15 @@ from itertools import chain
 from parse_common import clear, get_text, ChunkInserter
 from traceback import print_exception
 
-# tools
-def gen1_ipc(ipc):
-    if len(ipc) >= 8:
-        return ipc[:4] + ipc[4:7].lstrip() + '/' + ipc[7:]
-    else:
-        return ipc
-
-def gen2_ipc(ipc):
-    if len(ipc) >= 8:
-        return ipc[:4] + ipc[4:7].lstrip() + '/' + ipc[7:]
-    else:
-        return ipc
-
-def gen3_ipc(ipcsec):
-    for ipc in ipcsec.findall('classification-ipcr'):
-        yield get_text(ipc,'section') + get_text(ipc,'class') \
-            + get_text(ipc,'subclass') + get_text(ipc,'main-group') + '/' \
-            + get_text(ipc,'subgroup')
-
 def raw_text(par,sep=''):
     return sep.join(par.itertext())
-
-def clear(elem):
-    elem.clear()
-    while elem.getprevious() is not None:
-        del elem.getparent()[0]
 
 # parse it up
 def parse_grants_gen1(fname_in, store_patent):
     pat = None
     sec = None
     tag = None
-    ipclist = []
+    ipcver = None
     for nline in chain(open(fname_in, encoding='latin1'), ['PATN']):
         # peek at next line
         (ntag, nbuf) = (nline[:4].rstrip(), nline[5:-1])
@@ -61,13 +37,12 @@ def parse_grants_gen1(fname_in, store_patent):
         # regular tags
         if tag == 'PATN':
             if pat is not None:
-                pat['ipc1'] = ipclist.pop(0) if len(ipclist) > 0 else ''
-                pat['ipc2'] = ';'.join(ipclist)
+                pat['ipclist'] = [(ipc, ipcver) for ipc in pat['ipclist']]
                 if not store_patent(pat):
                     break
             pat = {}
+            pat['ipclist'] = []
             sec = 'PATN'
-            ipclist = []
         elif tag in ['INVT','ASSG','PRIR','CLAS','UREF','FREF','OREF','LREP','PCTA','ABST']:
             sec = tag
         elif tag in ['PAL','PAR','PAC','PA0','PA1']:
@@ -87,7 +62,10 @@ def parse_grants_gen1(fname_in, store_patent):
                 pat['filedate'] = buf
         elif tag == 'ICL':
             if sec == 'CLAS':
-                ipclist.append(gen1_ipc(buf))
+                pat['ipclist'].append(buf)
+        elif tag == 'EDF':
+            if sec == 'CLAS':
+                ipcver = buf
         elif tag == 'TTL':
             if sec == 'PATN':
                 ttl = buf
@@ -128,8 +106,14 @@ def parse_grants_gen2(fname_in, store_patent):
         # ipc code
         patref = bib.find('B500')
         ipcsec = patref.find('B510')
-        pat['ipc1'] = gen2_ipc(get_text(ipcsec,'B511/PDAT'))
-        pat['ipc2'] = ';'.join(gen2_ipc(get_text(child,'PDAT')) for child in ipcsec.findall('B512'))
+        ipcver = get_text(ipcsec,'B516/PDAT')
+        pat['ipclist'] = []
+        ipc1 = get_text(ipcsec, 'B511/PDAT')
+        if ipc1 is not None:
+            pat['ipclist'].append((ipc1,ipcver))
+        for child in ipcsec.findall('B512'):
+            ipc = get_text(child, 'PDAT')
+            pat['ipclist'].append((ipc, ipcver))
 
         # title
         pat['title'] = get_text(patref,'B540/STEXT/PDAT')
@@ -198,14 +182,49 @@ def parse_grants_gen3(fname_in, store_patent):
         pat['title'] = get_text(bib,'invention-title')
 
         # ipc code
+        ipclist = []
+
         ipcsec = bib.find('classifications-ipcr')
         if ipcsec is not None:
-            ipclist = list(gen3_ipc(ipcsec))
-            pat['ipc1'] = ipclist[0]
-            pat['ipc2'] = ';'.join(ipclist)
+            for ipc in ipcsec.findall('classification-ipcr'):
+                ipclist.append(('%s%s%s%3s%s' % (get_text(ipc, 'section'),
+                                                 get_text(ipc, 'class'),
+                                                 get_text(ipc, 'subclass'),
+                                                 get_text(ipc, 'main-group'),
+                                                 get_text(ipc, 'subgroup')),
+                                get_text(ipc, 'ipc-version-indicator/date')))
+
+        ipcsec = bib.find('classification-ipc')
+        if ipcsec is not None:
+            ipcver = get_text(ipcsec, 'edition')
+            ipc = get_text(ipcsec, 'main-classification')
+            ipclist.append((ipc, ipcver))
+            for ipc in ipcsec.findall('further-classification'):
+                ipclist.append((ipc.text, ipcver))
+
+        pat['ipclist'] = ipclist
 
         # claims
         pat['claims'] = get_text(bib,'number-of-claims')
+
+        # citations
+        refs = bib.find('references-cited')
+        prefix = ''
+        if refs is None:
+            refs = bib.find('us-references-cited')
+            prefix = 'us-'
+
+        if refs is not None:
+            cites = []
+            for cite in refs.findall(prefix+'citation'):
+                pcite = cite.find('patcit')
+                if pcite is not None:
+                    docid = pcite.find('document-id')
+                    pnum = get_text(docid, 'doc-number')
+                    kind = get_text(docid, 'kind')
+                    if kind == 'A' or kind.startswith('B'):
+                        cites.append(pnum)
+            pat['citations'] = cites
 
         # applicant name and address
         assignee = bib.find('assignees/assignee/addressbook')
@@ -258,18 +277,22 @@ args = parser.parse_args()
 # database setup
 con = sqlite3.connect(args.db)
 cur = con.cursor()
-cur.execute('create table if not exists patent (patnum int, filedate text, grantdate text, ipc1 text, ipc2 text, state text, country text, owner text, claims int, title text, abstract text, gen int)')
+cur.execute('create table if not exists patent (patnum int, filedate text, grantdate text, ipc text, ipcver text, state text, country text, owner text, claims int, title text, abstract text, gen int)')
 cur.execute('create unique index if not exists idx_patnum on patent (patnum)')
-chunker = ChunkInserter(con, table='patent')
+cur.execute('create table if not exists ipc (patnum int, code text, version text)')
+cur.execute('create unique index if not exists ipc_pair on ipc (patnum,code)')
+cur.execute('create index if not exists ipc_patnum on ipc (patnum)')
+cur.execute('create index if not exists ipc_code on ipc (code)')
+pat_chunker = ChunkInserter(con, table='patent')
+ipc_chunker = ChunkInserter(con, table='ipc')
 
 # fields
 fields = [
     'patnum', # Patent number
     'filedate', # Application date
     'grantdate', # Publication date
-    # 'ipcver', # IPC version info
-    'ipc1', # IPC code 1-4
-    'ipc2', # IPC code 4+
+    'ipc', # IPC codes
+    'ipcver', # IPC version info
     'state', # Province code
     'country', # Application Country
     'owner', # Applicant name
@@ -289,12 +312,19 @@ def store_patent(pat):
 
     i += 1
 
-    # storage
-    chunker.insert(*( pat.get(k, None) for k in fields ))
+    # store ipcs
+    pn = pat['patnum']
+    for (ipc, ver) in pat['ipclist']:
+        ipc_chunker.insert(pn, ipc, ver)
+
+    # stora patent
+    if len(pat['ipclist']) > 0:
+        (pat['ipc'], pat['ipcver']) = pat['ipclist'][0]
+    pat_chunker.insert(*( pat.get(k, None) for k in fields ))
 
     # output
     if i % 1000 == 0:
-        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, st = %(state)2s, ct = %(country)2s, ipc1 = %(ipc1)s' % { k: pat.get(k, '') for k in fields })
+        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, st = %(state)2s, ct = %(country)2s, ipc = %(ipc)-10s, ver = %(ipcver)s' % { k: pat.get(k, '') for k in fields })
 
     # limit
     if args.limit and i >= args.limit:
@@ -336,5 +366,6 @@ for fpath in file_list:
     print()
 
 # commit to db and close
-chunker.commit()
+pat_chunker.commit()
+ipc_chunker.commit()
 con.close()
