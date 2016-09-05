@@ -5,6 +5,10 @@ def get_text(parent,tag,default=''):
     child = parent.find(tag)
     return (child.text or default) if child is not None else default
 
+# get all text of node
+def raw_text(par, sep=''):
+    return sep.join(par.itertext()).strip()
+
 # preserve memory
 def clear(elem):
     elem.clear()

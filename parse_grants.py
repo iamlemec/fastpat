@@ -9,13 +9,10 @@ import argparse
 import sqlite3
 from lxml import etree
 from copy import copy
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from itertools import chain
-from parse_common import clear, get_text, ChunkInserter
-from traceback import print_exception
-
-def raw_text(par,sep=''):
-    return sep.join(par.itertext())
+from parse_common import clear, get_text, raw_text, ChunkInserter
+from traceback import print_exc
 
 # parse it up
 def parse_grants_gen1(fname_in, store_patent):
@@ -40,12 +37,14 @@ def parse_grants_gen1(fname_in, store_patent):
                 pat['ipclist'] = [(ipc, ipcver) for ipc in pat['ipclist']]
                 if not store_patent(pat):
                     break
-            pat = {}
+            pat = defaultdict(str)
+            pat['gen'] = 1
             pat['ipclist'] = []
+            pat['citlist'] = []
             sec = 'PATN'
-        elif tag in ['INVT','ASSG','PRIR','CLAS','UREF','FREF','OREF','LREP','PCTA','ABST']:
+        elif tag in ['INVT', 'ASSG', 'PRIR', 'CLAS', 'UREF', 'FREF', 'OREF', 'LREP', 'PCTA', 'ABST']:
             sec = tag
-        elif tag in ['PAL','PAR','PAC','PA0','PA1']:
+        elif tag in ['PAL', 'PAR', 'PAC', 'PA0', 'PA1']:
             if sec == 'ABST':
                 if 'abstract' not in pat:
                     pat['abstract'] = buf
@@ -68,7 +67,7 @@ def parse_grants_gen1(fname_in, store_patent):
                 ipcver = buf
         elif tag == 'TTL':
             if sec == 'PATN':
-                ttl = buf
+                pat['title'] = buf
         elif tag == 'NCL':
             if sec == 'PATN':
                 pat['claims'] = buf
@@ -82,6 +81,9 @@ def parse_grants_gen1(fname_in, store_patent):
         elif tag == 'CNT':
             if sec == 'ASSG':
                 pat['country'] = buf[:2]
+        elif tag == 'PNO':
+            if sec == 'UREF':
+                pat['citlist'].append(buf)
 
         # stage next tag and buf
         tag = ntag
@@ -89,46 +91,57 @@ def parse_grants_gen1(fname_in, store_patent):
 
 def parse_grants_gen2(fname_in, store_patent):
     def handle_patent(elem):
-        pat = {}
+        pat = defaultdict(str)
+        pat['gen'] = 2
 
         # top-level section
         bib = elem.find('SDOBI')
 
         # published patent
         pubref = bib.find('B100')
-        pat['patnum'] = get_text(pubref,'B110/DNUM/PDAT')
-        pat['grantdate'] = get_text(pubref,'B140/DATE/PDAT')
+        pat['patnum'] = get_text(pubref, 'B110/DNUM/PDAT')
+        pat['grantdate'] = get_text(pubref, 'B140/DATE/PDAT')
 
         # filing date
         appref = bib.find('B200')
-        pat['filedate'] = get_text(appref,'B220/DATE/PDAT')
+        pat['filedate'] = get_text(appref, 'B220/DATE/PDAT')
 
         # ipc code
         patref = bib.find('B500')
         ipcsec = patref.find('B510')
-        ipcver = get_text(ipcsec,'B516/PDAT')
-        pat['ipclist'] = []
+        ipcver = get_text(ipcsec, 'B516/PDAT')
+        ipclist = []
         ipc1 = get_text(ipcsec, 'B511/PDAT')
         if ipc1 is not None:
-            pat['ipclist'].append((ipc1,ipcver))
+            ipclist.append((ipc1, ipcver))
         for child in ipcsec.findall('B512'):
             ipc = get_text(child, 'PDAT')
-            pat['ipclist'].append((ipc, ipcver))
+            ipclist.append((ipc, ipcver))
+        pat['ipclist'] = ipclist
+
+        # citations
+        cites = []
+        refs = patref.find('B560')
+        if refs is not None:
+            for cite in refs.findall('B561'):
+                pcit = get_text(cite, 'PCIT/DOC/DNUM/PDAT')
+                cites.append(pcit)
+        pat['citlist'] = cites
 
         # title
-        pat['title'] = get_text(patref,'B540/STEXT/PDAT')
+        pat['title'] = get_text(patref, 'B540/STEXT/PDAT')
 
         # claims
-        pat['claims'] = get_text(patref,'B570/B577/PDAT')
+        pat['claims'] = get_text(patref, 'B570/B577/PDAT')
 
         # applicant name and address
         ownref = bib.find('B700/B730/B731/PARTY-US')
         if ownref is not None:
-            pat['owner'] = get_text(ownref,'NAM/ONM/STEXT/PDAT').upper()
+            pat['owner'] = get_text(ownref, 'NAM/ONM/STEXT/PDAT').upper()
             address = ownref.find('ADR')
             if address is not None:
-                pat['state'] = get_text(address,'STATE/PDAT')
-                pat['country'] = get_text(address,'CTRY/PDAT',default='US')
+                pat['state'] = get_text(address, 'STATE/PDAT')
+                pat['country'] = get_text(address, 'CTRY/PDAT', default='US')
 
         # abstract
         abspars = elem.findall('SDOAB/BTEXT/PARA')
@@ -163,7 +176,8 @@ def parse_grants_gen2(fname_in, store_patent):
 
 def parse_grants_gen3(fname_in, store_patent):
     def handle_patent(elem):
-        pat = {}
+        pat = defaultdict(str)
+        pat['gen'] = 3
 
         # top-level section
         bib = elem.find('us-bibliographic-data-grant')
@@ -172,14 +186,14 @@ def parse_grants_gen3(fname_in, store_patent):
 
         # published patent
         pubinfo = pubref.find('document-id')
-        pat['patnum'] = get_text(pubinfo,'doc-number')
-        pat['grantdate'] = get_text(pubinfo,'date')
+        pat['patnum'] = get_text(pubinfo, 'doc-number')
+        pat['grantdate'] = get_text(pubinfo, 'date')
 
         # filing date
-        pat['filedate'] = get_text(appref,'document-id/date')
+        pat['filedate'] = get_text(appref, 'document-id/date')
 
         # title
-        pat['title'] = get_text(bib,'invention-title')
+        pat['title'] = get_text(bib, 'invention-title')
 
         # ipc code
         ipclist = []
@@ -205,7 +219,7 @@ def parse_grants_gen3(fname_in, store_patent):
         pat['ipclist'] = ipclist
 
         # claims
-        pat['claims'] = get_text(bib,'number-of-claims')
+        pat['claims'] = get_text(bib, 'number-of-claims')
 
         # citations
         refs = bib.find('references-cited')
@@ -214,9 +228,9 @@ def parse_grants_gen3(fname_in, store_patent):
             refs = bib.find('us-references-cited')
             prefix = 'us-'
 
+        cites = []
         if refs is not None:
-            cites = []
-            for cite in refs.findall(prefix+'citation'):
+            for cite in refs.findall(prefix + 'citation'):
                 pcite = cite.find('patcit')
                 if pcite is not None:
                     docid = pcite.find('document-id')
@@ -224,20 +238,20 @@ def parse_grants_gen3(fname_in, store_patent):
                     kind = get_text(docid, 'kind')
                     if kind == 'A' or kind.startswith('B'):
                         cites.append(pnum)
-            pat['citations'] = cites
+        pat['citlist'] = cites
 
         # applicant name and address
         assignee = bib.find('assignees/assignee/addressbook')
         if assignee is not None:
-            pat['owner'] = get_text(assignee,'orgname').upper()
+            pat['owner'] = get_text(assignee, 'orgname').upper()
             address = assignee.find('address')
-            pat['state'] = get_text(address,'state')
-            pat['country'] = get_text(address,'country')
+            pat['state'] = get_text(address, 'state')
+            pat['country'] = get_text(address, 'country')
 
         # abstract
         abspar = elem.find('abstract')
         if abspar is not None:
-            pat['abstract'] = raw_text(abspar,sep=' ')
+            pat['abstract'] = raw_text(abspar, sep=' ')
 
         # roll it in
         return store_patent(pat)
@@ -269,7 +283,7 @@ def parse_grants_gen3(fname_in, store_patent):
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='USPTO patent parser.')
-parser.add_argument('fname_in', type=str, nargs='*', help='path of file to parse')
+parser.add_argument('target', type=str, default='grant_files', help='path or directory of file(s) to parse')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
 parser.add_argument('--limit', type=int, help='only parse n patents')
 args = parser.parse_args()
@@ -283,8 +297,11 @@ cur.execute('create table if not exists ipc (patnum int, code text, version text
 cur.execute('create unique index if not exists ipc_pair on ipc (patnum,code)')
 cur.execute('create index if not exists ipc_patnum on ipc (patnum)')
 cur.execute('create index if not exists ipc_code on ipc (code)')
+cur.execute('create table if not exists cite (src int, dst int)')
+cur.execute('create unique index if not exists cite_pair on cite (src,dst)')
 pat_chunker = ChunkInserter(con, table='patent')
 ipc_chunker = ChunkInserter(con, table='ipc')
+cit_chunker = ChunkInserter(con, table='cite')
 
 # fields
 fields = [
@@ -307,20 +324,25 @@ i = 0
 def store_patent(pat):
     global i
 
-    if not pat.get('patnum', '').startswith('0') or len(pat.get('owner', '')) == 0:
+    # only utility patents with owners
+    pn = pat['patnum']
+    if not pn.startswith('0') or len(pat['owner']) == 0:
         return True
 
     i += 1
 
     # store ipcs
-    pn = pat['patnum']
     for (ipc, ver) in pat['ipclist']:
         ipc_chunker.insert(pn, ipc, ver)
 
-    # stora patent
+    # store cites
+    for cite in pat['citlist']:
+        cit_chunker.insert(pn, cite)
+
+    # store patent
     if len(pat['ipclist']) > 0:
         (pat['ipc'], pat['ipcver']) = pat['ipclist'][0]
-    pat_chunker.insert(*( pat.get(k, None) for k in fields ))
+    pat_chunker.insert(*(pat.get(k, None) for k in fields))
 
     # output
     if i % 1000 == 0:
@@ -333,12 +355,14 @@ def store_patent(pat):
     return True
 
 # collect files
-if len(args.fname_in) == 0:
-    file_list = sorted(glob.glob('grant_files/*.dat')) \
-              + sorted(glob.glob('grant_files/pgb*.xml')) \
-              + sorted(glob.glob('grant_files/ipgb*.xml'))
+if os.path.isdir(args.target):
+    file_list = sorted(glob.glob('%s/*.dat' % args.target)) \
+              + sorted(glob.glob('%s/pgb*.xml' % args.target)) \
+              + sorted(glob.glob('%s/ipgb*.xml' % args.target))
+elif os.path.isfile(args.target):
+    file_list = [args.target]
 else:
-    file_list = args.fname_in
+    raise(Exception('Can\'t find file or directory here'))
 
 # parse by generation
 for fpath in file_list:
@@ -353,7 +377,7 @@ for fpath in file_list:
         gen = 3
         parser = parse_grants_gen3
     else:
-        raise Exception('Unknown format')
+        raise(Exception('Unknown format'))
 
     print('Parsing %s, gen = %d' % (fname, gen))
     i0 = i
@@ -361,11 +385,12 @@ for fpath in file_list:
         parser(fpath, store_patent)
     except Exception as e:
         print('EXCEPTION OCCURRED!')
-        print_exception()
+        print_exc()
     print('Found %d patents, %d total' % (i-i0, i))
     print()
 
 # commit to db and close
 pat_chunker.commit()
 ipc_chunker.commit()
+cit_chunker.commit()
 con.close()
