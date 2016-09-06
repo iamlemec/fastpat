@@ -283,7 +283,7 @@ def parse_grants_gen3(fname_in, store_patent):
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='USPTO patent parser.')
-parser.add_argument('target', type=str, default='grant_files', help='path or directory of file(s) to parse')
+parser.add_argument('--target', type=str, default='grant_files', help='path or directory of file(s) to parse')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
 parser.add_argument('--limit', type=int, help='only parse n patents')
 args = parser.parse_args()

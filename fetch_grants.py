@@ -10,7 +10,8 @@ grant_url_fmt = 'https://bulkdata.uspto.gov/data2/patent/grant/redbook/bibliogra
 url_list = []
 for line in open(grant_fpath):
     line = line.strip()
-    if os.path.isfile(line):
+    path = os.path.join(grant_dir, line)
+    if os.path.isfile(path):
         continue
 
     if line.startswith('ipgb'):
@@ -20,13 +21,17 @@ for line in open(grant_fpath):
     else:
         year = line[0:4]
 
-    fname = line
-    url = grant_url_fmt.format(year,line)
-    url_list.append((fname,url))
+    url = grant_url_fmt.format(year, line)
+    url_list.append((line, path, url))
 
-for (fname,url) in sorted(url_list):
-    fpath = os.path.join(raw_dir,fname)
-    print('Fetching {}'.format(fname))
-    os.system('curl -o {} {}'.format(fpath,url))
+for (name, path, url) in sorted(url_list):
+    print('Fetching {}'.format(name))
+    os.system('curl -o {} {}'.format(path, url))
     print()
     time.sleep(10)
+
+# to extract:
+# cd grant_files
+# ls -1 | xargs -n 1 unzip
+# rm *.txt
+# rm *.html
