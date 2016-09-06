@@ -20,9 +20,9 @@ def parse_grants_gen1(fname_in, store_patent):
     sec = None
     tag = None
     ipcver = None
-    for nline in chain(open(fname_in, encoding='latin1'), ['PATN']):
+    for nline in chain(open(fname_in, encoding='latin1', errors='ignore'), ['PATN']):
         # peek at next line
-        (ntag, nbuf) = (nline[:4].rstrip(), nline[5:-1])
+        (ntag, nbuf) = (nline[:4].rstrip(), nline[5:-1].rstrip())
         if tag is None:
             tag = ntag
             buf = nbuf
@@ -160,7 +160,7 @@ def parse_grants_gen2(fname_in, store_patent):
             clear(pat)
         return True
 
-    with open(fname_in) as f:
+    with open(fname_in, errors='ignore') as f:
         pp.feed('<root>\n')
         for line in f:
             if line.startswith('<?xml'):
@@ -211,10 +211,11 @@ def parse_grants_gen3(fname_in, store_patent):
         ipcsec = bib.find('classification-ipc')
         if ipcsec is not None:
             ipcver = get_text(ipcsec, 'edition')
-            ipc = get_text(ipcsec, 'main-classification')
-            ipclist.append((ipc, ipcver))
-            for ipc in ipcsec.findall('further-classification'):
-                ipclist.append((ipc.text, ipcver))
+            ipc0 = ipcsec.find('main-classification')
+            for ipc in chain([ipc0], ipcsec.findall('further-classification')):
+                itxt = ipc.text
+                itxt = itxt[:4] + itxt[4:7].replace('0',' ') + itxt[7:].replace('/','')
+                ipclist.append((itxt, ipcver))
 
         pat['ipclist'] = ipclist
 
@@ -265,7 +266,7 @@ def parse_grants_gen3(fname_in, store_patent):
             clear(pat)
         return True
 
-    with open(fname_in) as f:
+    with open(fname_in, errors='ignore') as f:
         pp.feed('<root>\n')
         for line in f:
             if line.startswith('<?xml'):
@@ -283,7 +284,7 @@ def parse_grants_gen3(fname_in, store_patent):
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='USPTO patent parser.')
-parser.add_argument('--target', type=str, default='grant_files', help='path or directory of file(s) to parse')
+parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
 parser.add_argument('--limit', type=int, help='only parse n patents')
 args = parser.parse_args()
@@ -355,14 +356,13 @@ def store_patent(pat):
     return True
 
 # collect files
-if os.path.isdir(args.target):
-    file_list = sorted(glob.glob('%s/*.dat' % args.target)) \
-              + sorted(glob.glob('%s/pgb*.xml' % args.target)) \
-              + sorted(glob.glob('%s/ipgb*.xml' % args.target))
-elif os.path.isfile(args.target):
-    file_list = [args.target]
+if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
+    targ_dir = 'grant_files' if len(args.target) == 0 else args.target[0]
+    file_list = sorted(glob.glob('%s/*.dat' % targ_dir)) \
+              + sorted(glob.glob('%s/pgb*.xml' % targ_dir)) \
+              + sorted(glob.glob('%s/ipgb*.xml' % targ_dir))
 else:
-    raise(Exception('Can\'t find file or directory here'))
+    file_list = args.target
 
 # parse by generation
 for fpath in file_list:

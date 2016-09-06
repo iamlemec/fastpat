@@ -2,20 +2,10 @@ Parse patent grant and assignment info from USPTO and match with Compustat data.
 
 ## File descriptions
 
-* Analysis
-  * analyze_patent.py: analyze just patent data
-  * analyze_transfer.py: analyze transfer data with firm match
-  * analyze_within.py: analyze firm data
-
 * Parsing raw data files
-  * parse_grants_all.py: parse all patent grant data (gen1,gen2,gen3) into patents.db
-  * parse_grants_gen1.py: parse gen1 patent grant data into patents.db
-  * parse_grants_gen2.py: parse gen2 patent grant data into patents.db
-  * parse_grants_gen3.py: parse gen3 patent grant data into patents.db
+  * parse_grants.py: parse all patent grant (including classifications and citations) data into sqlite db
   * parse_assign_all.py: parse all patent assignment data into patents.db
   * parse_assign_etree.py: parse sax patent assignment data into patents.db
-  * parse_cites_all.py: parse all citations data (using NBER for pre-2006)
-  * parse_cites_gen3.py: parse cites from grant data into patents.db
   * parse_maint.py: parse patent maintenance data into patents.db
   * parse_compustat.py: parse compustat data
   * parse_nber_grants.py: parse nber grant info
@@ -31,9 +21,14 @@ Parse patent grant and assignment info from USPTO and match with Compustat data.
   * firm_merge.py: merge all of above into firmyear panel
 
 ## Workflow
+* Analysis
+  * analyze_patent.py: analyze just patent data
+  * analyze_transfer.py: analyze transfer data with firm match
+  * analyze_within.py: analyze firm data
 
-* fetch patent grant files: grant_files/fetch_grants.py
-* fetch patent assignment files: assign_files/fetch_assignments.py
+
+* fetch patent grant files: fetch_grants.py
+* fetch patent assignment files: fetch_assignments.py
 * unzip XML in grant_files/raw: `ls *.zip | xargs -n 1 unzip`
 * fix malformed XML in grant files: grant_files/fix_grants_gen2.py and grant_files/fix_grants_gen3.py
 * patent grants parse: parse_grants_all.py

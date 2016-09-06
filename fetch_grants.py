@@ -25,8 +25,8 @@ for line in open(grant_fpath):
     url_list.append((line, path, url))
 
 for (name, path, url) in sorted(url_list):
-    print('Fetching {}'.format(name))
-    os.system('curl -o {} {}'.format(path, url))
+    print('Fetching %s' % name)
+    os.system('curl -o %s %s' % (path, url))
     print()
     time.sleep(10)
 
