@@ -1,11 +1,18 @@
+import argparse
 import sqlite3
 import numpy as np
 import pandas as pd
 
+# parse input arguments
+parser = argparse.ArgumentParser(description='USPTO maintenance file parser.')
+parser.add_argument('target', type=str, help='path of file to parse')
+parser.add_argument('--db', type=str, default=None, help='database file to store to')
+args = parser.parse_args()
+
 # import to dataframe
 print('Reading table')
 
-datf = pd.read_fwf('maint_files/MaintFeeEvents_20150316.txt',
+datf = pd.read_fwf(args.target,
                    colspecs=[(0,7),(8,16),(17,18),(19,27),(28,36),(37,45),(46,51)],
                    usecols=[0,2,6],names=['patnum','is_small','event_code'])
 
@@ -32,8 +39,7 @@ dpat = pd.DataFrame({'last_maint':last_maint,'ever_large':ever_large})
 # commit to sql
 print('Writing table')
 
-db_fname = 'store/patents.db'
-con = sqlite3.connect(db_fname)
+con = sqlite3.connect(args.db)
 cur = con.cursor()
 dpat.to_sql('maint',con,if_exists='replace')
 cur.execute('create unique index maint_idx on maint(patnum)')

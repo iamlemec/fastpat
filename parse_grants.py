@@ -59,6 +59,9 @@ def parse_grants_gen1(fname_in, store_patent):
         elif tag == 'APD':
             if sec == 'PATN':
                 pat['filedate'] = buf
+        elif tag == 'OCL':
+            if sec == 'CLAS':
+                pat['class'] = buf
         elif tag == 'ICL':
             if sec == 'CLAS':
                 pat['ipclist'].append(buf)
@@ -74,6 +77,9 @@ def parse_grants_gen1(fname_in, store_patent):
         elif tag == 'NAM':
             if sec == 'ASSG':
                 pat['owner'] = buf.upper()
+        elif tag == 'CTY':
+            if sec == 'ASSG':
+                pat['city'] = buf.upper()
         elif tag == 'STA':
             if sec == 'ASSG':
                 pat['state'] = buf
@@ -119,6 +125,9 @@ def parse_grants_gen2(fname_in, store_patent):
             ipclist.append((ipc, ipcver))
         pat['ipclist'] = ipclist
 
+        # us class
+        pat['class'] = get_text(patref, 'B520/B521/PDAT')
+
         # citations
         cites = []
         refs = patref.find('B560')
@@ -140,6 +149,7 @@ def parse_grants_gen2(fname_in, store_patent):
             pat['owner'] = get_text(ownref, 'NAM/ONM/STEXT/PDAT').upper()
             address = ownref.find('ADR')
             if address is not None:
+                pat['city'] = get_text(address, 'CITY/PDAT').upper()
                 pat['state'] = get_text(address, 'STATE/PDAT')
                 pat['country'] = get_text(address, 'CTRY/PDAT', default='US')
 
@@ -219,6 +229,11 @@ def parse_grants_gen3(fname_in, store_patent):
 
         pat['ipclist'] = ipclist
 
+        # us class
+        oclsec = bib.find('classification-national')
+        if oclsec is not None:
+            pat['class'] = get_text(oclsec, 'main-classification')
+
         # claims
         pat['claims'] = get_text(bib, 'number-of-claims')
 
@@ -246,6 +261,7 @@ def parse_grants_gen3(fname_in, store_patent):
         if assignee is not None:
             pat['owner'] = get_text(assignee, 'orgname').upper()
             address = assignee.find('address')
+            pat['city'] = get_text(address, 'city').upper()
             pat['state'] = get_text(address, 'state')
             pat['country'] = get_text(address, 'country')
 
@@ -283,7 +299,7 @@ def parse_grants_gen3(fname_in, store_patent):
 # MAIN SECTION
 
 # parse input arguments
-parser = argparse.ArgumentParser(description='USPTO patent parser.')
+parser = argparse.ArgumentParser(description='USPTO patent grant parser.')
 parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
 parser.add_argument('--limit', type=int, help='only parse n patents')
@@ -292,7 +308,7 @@ args = parser.parse_args()
 # database setup
 con = sqlite3.connect(args.db)
 cur = con.cursor()
-cur.execute('create table if not exists patent (patnum int, filedate text, grantdate text, ipc text, ipcver text, state text, country text, owner text, claims int, title text, abstract text, gen int)')
+cur.execute('create table if not exists patent (patnum int, filedate text, grantdate text, class text, ipc text, ipcver text, city text, state text, country text, owner text, claims int, title text, abstract text, gen int)')
 cur.execute('create unique index if not exists idx_patnum on patent (patnum)')
 cur.execute('create table if not exists ipc (patnum int, code text, version text)')
 cur.execute('create unique index if not exists ipc_pair on ipc (patnum,code)')
@@ -309,11 +325,13 @@ fields = [
     'patnum', # Patent number
     'filedate', # Application date
     'grantdate', # Publication date
+    'class', # US patent classification
     'ipc', # IPC codes
     'ipcver', # IPC version info
-    'state', # Province code
-    'country', # Application Country
-    'owner', # Applicant name
+    'city', # Assignee city
+    'state', # State code
+    'country', # Assignee country
+    'owner', # Assignee name
     'claims', # Independent claim
     'title', # Title
     'abstract', # Abstract
@@ -326,8 +344,8 @@ def store_patent(pat):
     global i
 
     # only utility patents with owners
-    pn = pat['patnum']
-    if not pn.startswith('0') or len(pat['owner']) == 0:
+    pat['patnum'] = pat['patnum'].lstrip('0')[:7]
+    if not pat['patnum'].isnumeric() or len(pat['owner']) == 0:
         return True
 
     i += 1
@@ -347,7 +365,7 @@ def store_patent(pat):
 
     # output
     if i % 1000 == 0:
-        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, st = %(state)2s, ct = %(country)2s, ipc = %(ipc)-10s, ver = %(ipcver)s' % { k: pat.get(k, '') for k in fields })
+        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, ci = %(city)15.15s, st = %(state)2s, ct = %(country)2s, ocl = %(class)s, ipc = %(ipc)-10s, ver = %(ipcver)s' % { k: pat.get(k, '') for k in fields })
 
     # limit
     if args.limit and i >= args.limit:

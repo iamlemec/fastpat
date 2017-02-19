@@ -120,4 +120,3 @@ cur.execute('create unique index assignee_name_idx on assignee_name(name asc)')
 # close db
 conn.commit()
 conn.close()
-

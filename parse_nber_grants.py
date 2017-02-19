@@ -65,4 +65,3 @@ print cur.execute('select count(*) from matched_grant where gvkey not null')[0][
 # close db
 conn.commit()
 conn.close()
-

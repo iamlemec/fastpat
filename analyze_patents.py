@@ -1,6 +1,7 @@
 import sys
 import itertools
 import json
+import argparse
 import sqlite3
 import numpy as np
 import pandas as pd
@@ -9,37 +10,37 @@ import scipy.stats as stats
 import vector_tools as vt
 import data_tools as dt
 
+# parse input arguments
+parser = argparse.ArgumentParser(description='Merge firm patent data.')
+parser.add_argument('--db', type=str, default=None, help='database file to store to')
+parser.add_argument('--stage_min', type=int, default=0, help='min stage to run')
+parser.add_argument('--stage_max', type=int, default=sys.maxsize, help='max stage to run')
+parser.add_argument('--base_year', type=int, default=1990, help='start year of window')
+parser.add_argument('--period_len', type=int, default=10, help='length (years) of window')
+parser.add_argument('--pclass', type=str, default='class', help='patent classification scheme')
+args = parser.parse_args()
+
+# translate into flags
 run_flags = [True,True,True,True,True,True]
-
-# execution state
-if len(sys.argv) == 1:
-  stage_min = 0
-  stage_max = sys.maxsize
-elif len(sys.argv) == 2:
-  stage_min = int(sys.argv[1])
-  stage_max = sys.maxsize
-else:
-  stage_min = int(sys.argv[1])
-  stage_max = int(sys.argv[2])
-
-for i in range(len(run_flags)): run_flags[i] &= (stage_min <= i) & (stage_max >= i)
+for i in range(len(run_flags)): run_flags[i] &= (args.stage_min <= i) & (args.stage_max >= i)
 
 # firm panel years
-base_year = 1995
-period_len = 5
+base_year = args.base_year
+period_len = args.period_len
 top_year = base_year + period_len
+pclass = args.pclass
+mode_pclass = 'mode_' + pclass
 
 if run_flags[0]:
     print('Loading data')
 
     # load firm data
     # firm_life starts a firm when they file for their first patent and ends when they file for their last
-    con = sqlite3.connect('store/patents.db')
+    con = sqlite3.connect(args.db)
     datf_idx = pd.read_sql('select * from firmyear_index',con)
     firm_info = pd.read_sql('select * from firm_life',con)
     grant_info = pd.read_sql('select * from patent_info',con)
-    trans_info = pd.read_sql('select * from assignment_info where execyear!=\'\'',con)
-    # firm_cite_year = pd.read_sql('select * from firm_cite_year',con)
+    trans_info = pd.read_sql('select * from assign_info where execyear!=\'\'',con)
     con.close()
 
     # basic stats
@@ -69,7 +70,7 @@ if run_flags[0]:
     # group by size-year
     qcut_size = 0.8
     median_stock_vec = all_year_groups['stock'].quantile(qcut_size)
-    median_stock = median_stock_vec[datf_idx['year']]
+    median_stock = median_stock_vec[datf_idx['year']].values
     datf_idx['size_bin'] = datf_idx['stock'] > median_stock
 
     mean_stock_vec = all_year_groups['stock'].mean()
@@ -100,12 +101,13 @@ if run_flags[1]:
 
     # data selection parameters
     index_cols = ['firm_num']
-    type_int_cols = ['year','naics2','naics3','mode_class','age']
-    type_float_cols = ['employ','revenue','income','stock','mktval','intan','assets','mode_frac','high_tech']
+    type_int_cols = ['year','naics2','naics3','age']
+    type_float_cols = ['employ','revenue','income','stock','mktval','intan','assets','mode_class_frac','mode_ipc_frac','high_tech']
     type_bool_cols = ['size_bin','age_bin','ht_bin']
+    type_str_cols = ['mode_class','mode_ipc']
     sum_float_cols = ['assets','capx','cash','cogs','deprec','intan','debt','employ','income','revenue','sales','rnd','fcost','mktval','acquire',
                       'file_pnum','grant_pnum','source_pnum','dest_pnum','trans_pnum','expire_pnum','n_cited','n_self_cited','n_ext_cited','n_citing']
-    type_cols = type_int_cols + type_float_cols + type_bool_cols
+    type_cols = type_int_cols + type_float_cols + type_bool_cols + type_str_cols
     pure_type_cols = list(set(type_cols)-set(sum_float_cols))
     all_cols = list(set(index_cols+type_cols+sum_float_cols))
 
@@ -189,6 +191,7 @@ if run_flags[2]:
     print('Firm type breakdowns')
 
     firm_incumbents = firm_totals[~firm_totals['entered']]
+    firm_incumbents = firm_incumbents.drop(['entered', 'mode_class', 'mode_ipc'], axis=1)
 
     firm_size_groups = firm_incumbents.groupby(('size_bin'))
     firm_age_groups = firm_incumbents.groupby(('age_bin'))
@@ -223,7 +226,7 @@ if run_flags[3]:
     # merge in transfers
     trans_cols = ['size_bin','age_bin','size_rank','age_rank','stock','age']
     datf_idx_sub = datf_idx[['firm_num','year']+trans_cols]
-    trans_merge = pd.merge(trans_info,grant_info[['patnum','classone','classtwo','high_tech','fileyear','grantyear']],how='left',left_on='patnum',right_on='patnum')
+    trans_merge = pd.merge(trans_info,grant_info[['patnum','class','ipc','high_tech','fileyear','grantyear']],how='left',left_on='patnum',right_on='patnum')
     trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['dest_fn','execyear'],right_on=['firm_num','year'])
     trans_merge = trans_merge.rename(columns=dict([(s,s+'_dest') for s in ['firm_num']+trans_cols]))
     trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['source_fn','execyear'],right_on=['firm_num','year'])
@@ -249,11 +252,11 @@ if run_flags[3]:
     trans_stats = trans_merge[(trans_merge['execyear']>=base_year)&(trans_merge['execyear']<top_year)]
 
     # group by patent class
-    trans_class_groups = trans_stats.groupby('classone')
+    trans_class_groups = trans_stats.groupby(pclass)
     trans_class_means = trans_class_groups.mean().rename(columns=dt.prefixer('trans_')).rename(columns=dt.postfixer('_mean'))
 
     # panel of all firms in year range
-    firm_info_panel = firm_info[(firm_info['year_max']>=base_year)&(firm_info['year_min']<top_year)]
+    # firm_info_panel = firm_info[(firm_info['year_max']>=base_year)&(firm_info['year_min']<top_year)]
 
     # panel of all citing firm pairs in year range
     # firm_cite_panel = firm_cite_year[(firm_cite_year['cite_year']>=base_year)&(firm_cite_year['cite_year']<top_year)]
@@ -270,13 +273,15 @@ if run_flags[3]:
 if run_flags[4]:
     print('Toplevel industry info')
 
-    grant_class_groups = grant_info.groupby('classone')
+    grant_class_groups = grant_info.groupby(pclass)
     grant_class_born = grant_class_groups['fileyear'].quantile(0.01)
     grant_class_base = pd.DataFrame({'class_born':grant_class_born})
     grant_class_base['class_age'] = base_year - grant_class_base['class_born']
 
-    # modal classone group stats
-    class_groups = firm_totals.groupby('mode_class')
+    # modal class group stats
+    other_code = 'ipc' if pclass == 'class' else 'class'
+    other_mode = 'mode_' + other_code
+    class_groups = firm_totals.drop([other_mode],axis=1).groupby(mode_pclass)
     class_sums = class_groups.sum()
     class_means = class_groups.mean()
     class_medians = class_groups.median()
@@ -321,10 +326,10 @@ if run_flags[4]:
     firm_grants['expire_eight'] = firm_grants['life_grant'] <= 8
     firm_grants['expire_twelve'] = firm_grants['life_grant'] <= 12
     firm_grants['grant_lag'] = firm_grants['grantyear'] - firm_grants['fileyear']
-    firm_grants['trans_lag'] = firm_grants['first_trans'] - firm_grants['fileyear']
+    firm_grants['trans_lag'] = pd.to_numeric(firm_grants['first_trans']) - firm_grants['fileyear']
     firm_grants['trans_3yr'] = firm_grants['trans_lag'] <= 3
 
-    grant_class_groups = firm_grants.groupby('classone')
+    grant_class_groups = firm_grants.groupby(pclass)
     grant_class_size = grant_class_groups.size()
     grant_class_sums = grant_class_groups.sum()
     grant_class_means = grant_class_groups.mean()

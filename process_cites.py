@@ -1,24 +1,32 @@
 # match citation data with aggregated firm data (to be run before firm_merge.py)
 
+import argparse
 import sqlite3
 import numpy as np
 import pandas as pd
 
+# parse input arguments
+parser = argparse.ArgumentParser(description='Merge patent citation data.')
+parser.add_argument('--db', type=str, default=None, help='database file to store to')
+args = parser.parse_args()
+
 # load in a lot of data
-db_fname = 'store/patents.db'
-con = sqlite3.connect(db_fname)
+con = sqlite3.connect(args.db)
 cur = con.cursor()
 
 print('Loading from database')
 
-datf_cite = pd.read_sql('select citer,citee from citation',con)
+datf_cite = pd.read_sql('select src,dst from cite',con)
 datf_grant = pd.read_sql('select patnum,firm_num,fileyear from patent_basic',con)
 # datf_trans = pd.read_sql('select assignid,patnum,source_fn,dest_fn,execyear from assignment_info',con)
 
 print('Matching with patents')
 
 # match citations to firms with patnum
-datf_cite = datf_cite.rename(columns={'citer':'citer_pnum','citee':'citee_pnum'})
+datf_cite['src'] = pd.to_numeric(datf_cite['src'],errors='coerce')
+datf_cite['dst'] = pd.to_numeric(datf_cite['dst'],errors='coerce')
+datf_cite = datf_cite.dropna().astype(np.int)
+datf_cite = datf_cite.rename(columns={'src':'citer_pnum','dst':'citee_pnum'})
 datf_cite = datf_cite.merge(datf_grant,how='left',left_on='citer_pnum',right_on='patnum',suffixes=('','_citer'))
 datf_cite = datf_cite.drop(['patnum'],axis=1).rename(columns={'firm_num':'citer_fnum','fileyear':'cite_year'})
 datf_cite = datf_cite.merge(datf_grant[['patnum','firm_num']],how='left',left_on='citee_pnum',right_on='patnum',suffixes=('','_citee'))

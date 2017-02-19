@@ -79,7 +79,7 @@ def convey_type(convey):
 # MAIN SECTION
 
 # parse input arguments
-parser = argparse.ArgumentParser(description='USPTO patent parser.')
+parser = argparse.ArgumentParser(description='USPTO patent assignment parser.')
 parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
 parser.add_argument('--limit', type=int, help='only parse n patents')
@@ -89,7 +89,7 @@ args = parser.parse_args()
 con = sqlite3.connect(args.db)
 cur = con.cursor()
 cur.execute('create table if not exists assign (assignid integer primary key, patnum int, execdate text, recdate text, conveyance text, assignor text, assignee text, assignee_state text, assignee_country text)')
-cur.execute('create unique index if not exists idx_assign on assign (patnum,execdate)')
+cur.execute('create unique index if not exists idx_assign on assign (patnum,execdate,assignor,assignee)')
 chunker = ChunkInserter(con, table='assign')
 
 def gen_patnums(patents):
@@ -151,15 +151,19 @@ def parse_gen3(fname_in):
 
         # output
         for pn in patnums:
-            chunker.insert(None, pn,exec_date, recd_date, convey, assignor_name, assignee_name, assignee_state, assignee_country)
+            chunker.insert(None, pn, exec_date, recd_date, convey, assignor_name, assignee_name, assignee_state, assignee_country)
+
+        # free memory
+        clear(elem)
 
         # stats
         i += 1
         p += npat
-            
-        if i % 100 == 0:
+
+        # logging
+        if i % 1000 == 0:
             print('%4d: %40.40s -> %30.30s (%20.20s, %20.20s)' % (npat, assignor_name, assignee_name, assignee_state, assignee_country))
-        
+
         # break
         if args.limit and i >= args.limit:
             return False
@@ -192,4 +196,3 @@ for fpath in file_list:
 # clear out the rest
 chunker.commit()
 con.close()
-
