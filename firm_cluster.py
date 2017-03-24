@@ -1,5 +1,4 @@
-# name matching using locally sensitive hashing (simhash)
-# this is python3
+# name matching using locality-sensitive hashing (simhash)
 # these are mostly idempotent
 
 from itertools import chain, repeat

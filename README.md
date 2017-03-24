@@ -1,4 +1,6 @@
-Parse patent grant and assignment info from USPTO and match with Compustat data.
+Parse patent grant and assignment info from USPTO and match with Compustat data. This handles all patent grant formats (dat, pgb, ipgb) and uses `sqlite3` as the storage backend.
+
+Additionally, cluster patents by firm name. Uses locality-sensitive hashing as a first pass then find components in the graph induced by a Levenshtein distance threshhold.
 
 ## File descriptions
 
@@ -7,7 +9,7 @@ Parse patent grant and assignment info from USPTO and match with Compustat data.
     * `fetch_assign.py`: fetch patent assignment files
     * batch unzip XML files: `ls *.zip | xargs -n 1 unzip`
 * Parsing raw data files
-    * `parse_grants.py`: parse patent grants (including citations)
+    * `parse_grants.py`: parse patent grants (including citations), all data formats
     * `parse_assign.py`: parse patent assignments
     * `parse_maint.py`: parse patent maintenance events
     * `parse_compustat.py`: parse compustat data
@@ -22,20 +24,19 @@ Parse patent grant and assignment info from USPTO and match with Compustat data.
     * `analyze_transfer.py`: analyze transfer data with firm match
     * `analyze_within.py`: analyze firm data
 * Extra utilities:
-  * `parse_nber_grants.py`: parse nber grant info
-  * `parse_nber_info.py`: parse ownership info from nber
+    * `parse_nber_grants.py`: parse nber grant info
+    * `parse_nber_info.py`: parse ownership info from nber
 
 ## Database layout
 
-* `patent`: (patnum int, filedate text, grantdate text, classone int, classtwo int, owner text)
-* `assignment`: (patnum int, execdate text, recdate text, conveyance text, assignor text, assignee text)
-* `firmyear_info`: final product, merged panel data
-* `owner_firm` (ownerid int, firm_num int) - owner corresponds to unique string, firms are collection of similarly named owners
+* `patent`: (patnum int, filedate text, grantdate text, class text, ipc text, ipcver text, city text, state text, country text, owner text, claims int, title text, abstract text, gen int)
+* `assign`: (assignid integer primary key, patnum int, execdate text, recdate text, conveyance text, assignor text, assignee text, assignee_state text, assignee_country text)
+* `maint`: (patnum int, ever_large int, last_maint int)
 
 ## Data sources
 
-* `assign_files`: patent reassignment data from Google/USPTO
 * `grant_files`: patent grant data from Google/USPTO
+* `assign_files`: patent reassignment data from Google/USPTO
+* `maint_files`: patent maintentance data from Google/USPTO
 * `compustat_files`: Compustat data since 1950 from WRDS
 
-## TODO
