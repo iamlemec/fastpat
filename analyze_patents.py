@@ -7,9 +7,6 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
-import vector_tools as vt
-import data_tools as dt
-
 # parse input arguments
 parser = argparse.ArgumentParser(description='Merge firm patent data.')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
@@ -31,6 +28,23 @@ top_year = base_year + period_len
 pclass = args.pclass
 mode_pclass = 'mode_' + pclass
 
+# utils
+def noinf(s):
+    s[np.isinf(s)] = np.nan
+    return s
+
+def stack_frames(dfs,prefixes=None,suffixes=None):
+    if prefixes is None:
+        prefixes = len(dfs)*['']
+    elif type(prefixes) not in (tuple,list):
+        prefixes = len(dfs)*[prefixes]
+    if suffixes is None:
+        suffixes = len(dfs)*['']
+    elif type(suffixes) not in (tuple,list):
+        suffixes = len(dfs)*[suffixes]
+    return pd.concat([df.add_prefix(pre).add_suffix(suf) for (df,pre,suf) in zip(dfs,prefixes,suffixes)],axis=1)
+
+# stages
 if run_flags[0]:
     print('Loading data')
 
@@ -51,18 +65,18 @@ if run_flags[0]:
     datf_idx['trans_net'] = datf_idx['dest_pnum']-datf_idx['source_pnum']
     datf_idx['ht_bin'] = datf_idx['high_tech'] > 0.9
     datf_idx['cost'] = datf_idx['revenue'] - datf_idx['income']
-    datf_idx['profit'] = dt.noinf(datf_idx['income']/datf_idx['cost'])
-    datf_idx['prod'] = dt.noinf(datf_idx['income']/datf_idx['employ'])
-    datf_idx['rndi'] = dt.noinf(datf_idx['rnd']/datf_idx['revenue'])
-    datf_idx['file_frac'] = dt.noinf(datf_idx['file_pnum']/datf_idx['stock'])
-    datf_idx['dest_frac'] = dt.noinf(datf_idx['dest_pnum']/datf_idx['stock'])
-    datf_idx['source_frac'] = dt.noinf(datf_idx['source_pnum']/datf_idx['stock'])
-    datf_idx['trans_net_frac'] = dt.noinf(datf_idx['trans_net']/datf_idx['stock'])
-    datf_idx['dest_share'] = dt.noinf(datf_idx['dest_pnum']/(datf_idx['dest_pnum']+datf_idx['grant_pnum']))
-    datf_idx['source_share'] = dt.noinf(datf_idx['source_pnum']/(datf_idx['source_pnum']+datf_idx['grant_pnum']))
-    datf_idx['trans_net_share'] = dt.noinf(datf_idx['trans_net']/datf_idx['grant_pnum'])
+    datf_idx['profit'] = noinf(datf_idx['income']/datf_idx['cost'])
+    datf_idx['prod'] = noinf(datf_idx['income']/datf_idx['employ'])
+    datf_idx['rndi'] = noinf(datf_idx['rnd']/datf_idx['revenue'])
+    datf_idx['file_frac'] = noinf(datf_idx['file_pnum']/datf_idx['stock'])
+    datf_idx['dest_frac'] = noinf(datf_idx['dest_pnum']/datf_idx['stock'])
+    datf_idx['source_frac'] = noinf(datf_idx['source_pnum']/datf_idx['stock'])
+    datf_idx['trans_net_frac'] = noinf(datf_idx['trans_net']/datf_idx['stock'])
+    datf_idx['dest_share'] = noinf(datf_idx['dest_pnum']/(datf_idx['dest_pnum']+datf_idx['grant_pnum']))
+    datf_idx['source_share'] = noinf(datf_idx['source_pnum']/(datf_idx['source_pnum']+datf_idx['grant_pnum']))
+    datf_idx['trans_net_share'] = noinf(datf_idx['trans_net']/datf_idx['grant_pnum'])
     datf_idx['n_ext_cited'] = datf_idx['n_cited'] - datf_idx['n_self_cited']
-    datf_idx['growth'] = dt.noinf(datf_idx['file_pnum']/(datf_idx['stock']+0.5*datf_idx['patnet']))
+    datf_idx['growth'] = noinf(datf_idx['file_pnum']/(datf_idx['stock']+0.5*datf_idx['patnet']))
 
     # group by year
     all_year_groups = datf_idx.groupby('year')
@@ -120,12 +134,12 @@ if run_flags[1]:
     firm_totals = firm_groups.sum()[sum_float_cols]
     firm_totals['obs_years'] = firm_groups.size()
 
-    firm_start = firm_groups.apply(lambda df: df.irow(0))
+    firm_start = firm_groups.apply(lambda df: df.iloc[0])
     firm_start[type_int_cols] = firm_start[type_int_cols].astype(np.int)
     firm_start[type_float_cols] = firm_start[type_float_cols].astype(np.float)
     firm_start[type_bool_cols] = firm_start[type_bool_cols].astype(np.bool)
 
-    firm_end = firm_groups.apply(lambda df: df.irow(-1))
+    firm_end = firm_groups.apply(lambda df: df.iloc[-1])
     firm_end[type_int_cols] = firm_end[type_int_cols].astype(np.int)
     firm_end[type_float_cols] = firm_end[type_float_cols].astype(np.float)
     firm_end[type_bool_cols] = firm_end[type_bool_cols].astype(np.bool)
@@ -146,42 +160,42 @@ if run_flags[1]:
         firm_totals[col+'_start'][firm_totals['entered']] = np.nan # entrants have no start state
         firm_totals[col+'_end'] = firm_end[col]
         firm_totals[col+'_change'] = firm_end[col] - firm_start[col]
-        firm_totals[col+'_lgrowth'] = dt.noinf(np.log(firm_totals[col+'_end']/firm_totals[col+'_start'])/(firm_totals['obs_years']-1))
+        firm_totals[col+'_lgrowth'] = noinf(np.log(firm_totals[col+'_end']/firm_totals[col+'_start'])/(firm_totals['obs_years']-1))
         firm_totals[col+'_lgrowth'].ix[firm_totals['entered']|firm_totals['exited']] = np.nan
         firm_totals[col+'_abs'] = np.abs(firm_totals[col+'_lgrowth'])
 
     # general firm statistics
-    firm_totals['file_frac'] = dt.noinf(firm_totals['file_pnum']/firm_totals['stock_start'])
-    firm_totals['source_frac'] = dt.noinf(firm_totals['source_pnum']/firm_totals['stock_start'])
-    firm_totals['dest_frac'] = dt.noinf(firm_totals['dest_pnum']/firm_totals['stock_start'])
-    firm_totals['dest_share'] = dt.noinf(firm_totals['dest_pnum']/(firm_totals['dest_pnum']+firm_totals['grant_pnum']))
-    firm_totals['source_share'] = dt.noinf(firm_totals['source_pnum']/(firm_totals['source_pnum']+firm_totals['grant_pnum']))
+    firm_totals['file_frac'] = noinf(firm_totals['file_pnum']/firm_totals['stock_start'])
+    firm_totals['source_frac'] = noinf(firm_totals['source_pnum']/firm_totals['stock_start'])
+    firm_totals['dest_frac'] = noinf(firm_totals['dest_pnum']/firm_totals['stock_start'])
+    firm_totals['dest_share'] = noinf(firm_totals['dest_pnum']/(firm_totals['dest_pnum']+firm_totals['grant_pnum']))
+    firm_totals['source_share'] = noinf(firm_totals['source_pnum']/(firm_totals['source_pnum']+firm_totals['grant_pnum']))
     firm_totals['file_frac_bin'] = firm_totals['file_frac'] > firm_totals['file_frac'].median()
-    firm_totals['file_stock_frac'] = dt.noinf(np.log1p(firm_totals['file_pnum']/firm_totals['stock_start']))/(period_len-1.0)
+    firm_totals['file_stock_frac'] = noinf(np.log1p(firm_totals['file_pnum']/firm_totals['stock_start']))/(period_len-1.0)
 
     firm_totals['cost'] = firm_totals['revenue'] - firm_totals['income']
-    firm_totals['prod'] = dt.noinf(firm_totals['income']/firm_totals['employ'])
-    firm_totals['rndi'] = dt.noinf(np.log1p(firm_totals['rnd']/firm_totals['revenue']))
-    firm_totals['rndi_cost'] = dt.noinf(np.log1p(firm_totals['rnd']/firm_totals['cost']))
-    firm_totals['ros'] = dt.noinf(firm_totals['income']/firm_totals['revenue'])
-    firm_totals['lros'] = dt.noinf(np.log(firm_totals['income']/firm_totals['revenue']))
-    firm_totals['profit'] = dt.noinf((firm_totals['income']+firm_totals['rnd'])/firm_totals['revenue'])
-    firm_totals['rnd_prod'] = dt.noinf(firm_totals['file_pnum']/firm_totals['rnd'])
-    firm_totals['markup'] = dt.noinf(firm_totals['revenue']/firm_totals['cogs'])-1.0
-    firm_totals['profit_cost'] = dt.noinf(firm_totals['revenue']/firm_totals['cost'])-1.0
-    firm_totals['markup_capx'] = dt.noinf(firm_totals['revenue']/(firm_totals['cogs']+firm_totals['capx']))-1.0
-    firm_totals['cashi'] = dt.noinf(firm_totals['cash']/firm_totals['assets'])
+    firm_totals['prod'] = noinf(firm_totals['income']/firm_totals['employ'])
+    firm_totals['rndi'] = noinf(np.log1p(firm_totals['rnd']/firm_totals['revenue']))
+    firm_totals['rndi_cost'] = noinf(np.log1p(firm_totals['rnd']/firm_totals['cost']))
+    firm_totals['ros'] = noinf(firm_totals['income']/firm_totals['revenue'])
+    firm_totals['lros'] = noinf(np.log(firm_totals['income']/firm_totals['revenue']))
+    firm_totals['profit'] = noinf((firm_totals['income']+firm_totals['rnd'])/firm_totals['revenue'])
+    firm_totals['rnd_prod'] = noinf(firm_totals['file_pnum']/firm_totals['rnd'])
+    firm_totals['markup'] = noinf(firm_totals['revenue']/firm_totals['cogs'])-1.0
+    firm_totals['profit_cost'] = noinf(firm_totals['revenue']/firm_totals['cost'])-1.0
+    firm_totals['markup_capx'] = noinf(firm_totals['revenue']/(firm_totals['cogs']+firm_totals['capx']))-1.0
+    firm_totals['cashi'] = noinf(firm_totals['cash']/firm_totals['assets'])
     firm_totals['cost'] = firm_totals['fcost'] + firm_totals['cogs']
 
-    firm_totals['fcost_frac'] = dt.noinf(firm_totals['fcost']/firm_totals['cost'])
-    firm_totals['capx_frac'] = dt.noinf(firm_totals['capx']/firm_totals['assets'])
-    firm_totals['intan_frac'] = dt.noinf(firm_totals['intan']/firm_totals['assets'])
-    firm_totals['debt_frac'] = dt.noinf(firm_totals['debt']/firm_totals['assets'])
-    firm_totals['tobinq'] = dt.noinf(firm_totals['mktval']/(firm_totals['assets']-firm_totals['debt']))
+    firm_totals['fcost_frac'] = noinf(firm_totals['fcost']/firm_totals['cost'])
+    firm_totals['capx_frac'] = noinf(firm_totals['capx']/firm_totals['assets'])
+    firm_totals['intan_frac'] = noinf(firm_totals['intan']/firm_totals['assets'])
+    firm_totals['debt_frac'] = noinf(firm_totals['debt']/firm_totals['assets'])
+    firm_totals['tobinq'] = noinf(firm_totals['mktval']/(firm_totals['assets']-firm_totals['debt']))
     firm_totals['capital'] = firm_totals['assets'] - firm_totals['intan']
-    firm_totals['invest_cap'] = dt.noinf(firm_totals['capx']/firm_totals['capital'])
-    firm_totals['invest_rnd'] = dt.noinf(firm_totals['rnd']/firm_totals['intan'])
-    firm_totals['acquire_int'] = dt.noinf(np.log1p(firm_totals['acquire']/firm_totals['assets']))
+    firm_totals['invest_cap'] = noinf(firm_totals['capx']/firm_totals['capital'])
+    firm_totals['invest_rnd'] = noinf(firm_totals['rnd']/firm_totals['intan'])
+    firm_totals['acquire_int'] = noinf(np.log1p(firm_totals['acquire']/firm_totals['assets']))
     firm_totals['pos_dest'] = firm_totals['dest_pnum'] > 0
     firm_totals['pos_source'] = firm_totals['source_pnum'] > 0
     firm_totals['pos_trans'] = firm_totals['trans_pnum'] > 0
@@ -215,9 +229,9 @@ if run_flags[2]:
     firm_fracs_by_age = firm_age_fracs.unstack(0)
 
     # cumulative fractions sorted by initial stock, excludes entrants obvi
-    firm_size_cumsum = firm_incumbents[['count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort(columns='stock_start').cumsum().apply(lambda s: s.astype(np.float)/s.irow(-1))
+    firm_size_cumsum = firm_incumbents[['count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort_values(by='stock_start').cumsum().apply(lambda s: s.astype(np.float)/s.iloc[-1])
     firm_size_cumsum = firm_size_cumsum.set_index(np.linspace(0.0,1.0,len(firm_size_cumsum)))
-    firm_age_cumsum = firm_incumbents[['age','count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort(columns='age').drop('age',axis=1).cumsum().apply(lambda s: s.astype(np.float)/s.irow(-1))
+    firm_age_cumsum = firm_incumbents[['age','count','stock_start','file_pnum','source_pnum','dest_pnum']].dropna().sort_values(by='age').drop('age',axis=1).cumsum().apply(lambda s: s.astype(np.float)/s.iloc[-1])
     firm_age_cumsum = firm_age_cumsum.set_index(np.linspace(0.0,1.0,len(firm_age_cumsum)))
 
 if run_flags[3]:
@@ -253,7 +267,7 @@ if run_flags[3]:
 
     # group by patent class
     trans_class_groups = trans_stats.groupby(pclass)
-    trans_class_means = trans_class_groups.mean().rename(columns=dt.prefixer('trans_')).rename(columns=dt.postfixer('_mean'))
+    trans_class_means = trans_class_groups.mean().add_prefix('trans_').add_suffix('_mean')
 
     # panel of all firms in year range
     # firm_info_panel = firm_info[(firm_info['year_max']>=base_year)&(firm_info['year_min']<top_year)]
@@ -287,29 +301,29 @@ if run_flags[4]:
     class_medians = class_groups.median()
     class_stds = class_groups.std()
     class_skews = class_groups.skew()
-    class_cvars = dt.noinf(class_stds/class_means)
-    class_sfracs = dt.noinf(class_sums.apply(lambda df: df/class_sums['stock_start']))
-    class_ffracs = dt.noinf(class_sums.apply(lambda df: df/class_sums['file_pnum']))
+    class_cvars = noinf(class_stds/class_means)
+    class_sfracs = noinf(class_sums.apply(lambda df: df/class_sums['stock_start']))
+    class_ffracs = noinf(class_sums.apply(lambda df: df/class_sums['file_pnum']))
     class_lmeans = class_groups.apply(lambda df: np.log1p(df.astype(np.float)).mean())
     class_lstds = class_groups.apply(lambda df: np.log1p(df.astype(np.float)).std())
     class_counts = class_groups.size()
 
     # aggregate into mecha-df
-    firm_class_info = dt.stack_frames([class_sums,class_means,class_medians,class_stds,class_skews,class_cvars,class_sfracs,class_ffracs,class_lmeans,class_lstds],postfixes=['_sum','_mean','_median','_std','_skew','_cvar','_sfrac','_ffrac','_lmean','_lstd'])
+    firm_class_info = stack_frames([class_sums,class_means,class_medians,class_stds,class_skews,class_cvars,class_sfracs,class_ffracs,class_lmeans,class_lstds],suffixes=['_sum','_mean','_median','_std','_skew','_cvar','_sfrac','_ffrac','_lmean','_lstd'])
     firm_class_info['stock_skew'] = class_groups['stock_start'].apply(lambda s: np.log1p(s).std())
-    firm_class_info['self_cited_frac'] = dt.noinf(class_sums['n_self_cited']/class_sums['n_cited'])
-    firm_class_info['cites_per_patent'] = dt.noinf(class_sums['n_cited']/class_sums['file_pnum'])
-    firm_class_info['agg_profit'] = dt.noinf(class_sums['income']/class_sums['cost'])
-    firm_class_info['agg_ros'] = dt.noinf(class_sums['income']/class_sums['revenue'])
-    firm_class_info['agg_cashi'] = dt.noinf(class_sums['cash']/class_sums['revenue'])
-    firm_class_info['agg_markup'] = dt.noinf(class_sums['revenue']/class_sums['cogs'])
-    firm_class_info['agg_rndi'] = dt.noinf(class_sums['rnd']/class_sums['revenue'])
-    firm_class_info['agg_invest'] = dt.noinf(class_sums['capx']/class_sums['capital'])
-    firm_class_info['agg_rndprod'] = dt.noinf(class_sums['file_pnum']/class_sums['rnd'])
-    firm_class_info['agg_acquire_int'] = dt.noinf(class_sums['acquire']/class_sums['assets'])
-    firm_class_info['agg_dest_ffrac'] = dt.noinf(class_sums['dest_pnum']/class_sums['file_pnum'])
+    firm_class_info['self_cited_frac'] = noinf(class_sums['n_self_cited']/class_sums['n_cited'])
+    firm_class_info['cites_per_patent'] = noinf(class_sums['n_cited']/class_sums['file_pnum'])
+    firm_class_info['agg_profit'] = noinf(class_sums['income']/class_sums['cost'])
+    firm_class_info['agg_ros'] = noinf(class_sums['income']/class_sums['revenue'])
+    firm_class_info['agg_cashi'] = noinf(class_sums['cash']/class_sums['revenue'])
+    firm_class_info['agg_markup'] = noinf(class_sums['revenue']/class_sums['cogs'])
+    firm_class_info['agg_rndi'] = noinf(class_sums['rnd']/class_sums['revenue'])
+    firm_class_info['agg_invest'] = noinf(class_sums['capx']/class_sums['capital'])
+    firm_class_info['agg_rndprod'] = noinf(class_sums['file_pnum']/class_sums['rnd'])
+    firm_class_info['agg_acquire_int'] = noinf(class_sums['acquire']/class_sums['assets'])
+    firm_class_info['agg_dest_ffrac'] = noinf(class_sums['dest_pnum']/class_sums['file_pnum'])
     firm_class_info['class_size'] = class_counts
-    firm_class_info['herfindahl'] = dt.noinf(class_groups['employ'].apply(lambda s: s.order().dropna()[-1::-1][:np.ceil(0.1*s.count()).astype(np.int)].sum()/s.sum()))
+    firm_class_info['herfindahl'] = noinf(class_groups['employ'].apply(lambda s: s.sort_values().dropna()[-1::-1][:np.ceil(0.1*s.count()).astype(np.int)].sum()/s.sum()))
     firm_class_info['herfindahl'][firm_class_info['class_size']<10] = np.nan
     firm_class_info['entrant_stock_frac'] = class_groups.apply(lambda df: df['stock_end'][df['entered']].sum()/df['stock_end'].sum())
     firm_class_info['entrant_employ_frac'] = class_groups.apply(lambda df: df['employ_end'][df['entered']].sum()/df['employ_end'].sum())
@@ -318,10 +332,10 @@ if run_flags[4]:
     firm_grants = grant_info[(grant_info['fileyear']>=base_year)&(grant_info['fileyear']<top_year)]
     firm_grants['pos_trans'] = firm_grants['ntrans'] > 0
     firm_grants['pos_self_cited'] = firm_grants['n_self_cited'] > 0
-    firm_grants['self_cited_frac'] = dt.noinf(firm_grants['n_self_cited'].astype(np.float)/firm_grants['n_cited'].astype(np.float))
+    firm_grants['self_cited_frac'] = noinf(firm_grants['n_self_cited'].astype(np.float)/firm_grants['n_cited'].astype(np.float))
     firm_grants['lots_self_cite'] = firm_grants['self_cited_frac'] >= 0.5
     firm_grants['n_ext_cited'] = firm_grants['n_cited'] - firm_grants['n_self_cited']
-    firm_grants['ext_cited_frac'] = dt.noinf(firm_grants['n_ext_cited'].astype(np.float)/firm_grants['n_cited'].astype(np.float))
+    firm_grants['ext_cited_frac'] = noinf(firm_grants['n_ext_cited'].astype(np.float)/firm_grants['n_cited'].astype(np.float))
     firm_grants['expire_four'] = firm_grants['life_grant'] <= 4
     firm_grants['expire_eight'] = firm_grants['life_grant'] <= 8
     firm_grants['expire_twelve'] = firm_grants['life_grant'] <= 12
@@ -334,8 +348,8 @@ if run_flags[4]:
     grant_class_sums = grant_class_groups.sum()
     grant_class_means = grant_class_groups.mean()
     grant_class_medians = grant_class_groups.median()
-    grant_class_ffracs = grant_class_sums.apply(lambda df: dt.noinf(df.astype(np.float)/grant_class_groups.size()))
-    grant_class_info = dt.stack_frames([grant_class_base,grant_class_means,grant_class_medians,grant_class_ffracs],prefixes=['grant_','grant_','grant_','grant_','grant_'],postfixes=['','_mean','_median','_ffrac'])
+    grant_class_ffracs = grant_class_sums.apply(lambda df: noinf(df.astype(np.float)/grant_class_groups.size()))
+    grant_class_info = stack_frames([grant_class_base,grant_class_means,grant_class_medians,grant_class_ffracs],prefixes=['grant_','grant_','grant_','grant_','grant_'],suffixes=['','_mean','_median','_ffrac'])
     grant_class_info['grant_class_number'] = grant_class_info.index
     grant_class_info['grant_class_size'] = grant_class_size
 
@@ -346,7 +360,7 @@ if run_flags[5]:
     print('Aggregate industry stats')
 
     # generate target values
-    targ_model = vt.Bundle()
+    targ_model = pd.Series().rename('value').rename_axis('name')
     targ_model['median_markup'] = firm_totals['markup'].median()
     targ_model['median_profit'] = firm_totals['profit'].median()
     targ_model['mean_markup'] = firm_totals['markup'].mean()-1.0
@@ -377,17 +391,28 @@ if run_flags[5]:
     targ_model['file_stock_mean'] = firm_totals['file_stock_frac'].mean()
     targ_model['file_stock_young'] = firm_totals['file_stock_frac'][firm_totals['age_bin']==0].mean()
     targ_model['file_stock_small'] = firm_totals['file_stock_frac'][firm_totals['size_bin']==0].mean()
-    vt.Bundle(targ_model.dict()).to_json(file_name='data/targets.json')
+    targ_model.to_csv('data/targets.csv',header=True)
 
     # distributions for paper
     markup_bins = np.linspace(0.0,1.0,16)
     markup_data = firm_totals['markup'].dropna()
     markup_mass = np.histogram(markup_data,bins=markup_bins)[0].astype(np.float)/len(markup_data)
     markup_vals = 0.5*(markup_bins[:-1]+markup_bins[1:])
+    pd.DataFrame({
+        'bin_min': markup_bins[:-1],
+        'bin_max': markup_bins[1:],
+        'bin_mid': markup_vals,
+        'mass': markup_mass
+    }).to_csv('data/markup_dist.csv', index=False)
 
     translag_bins = np.linspace(0.0,20.0,20)
     translag_data = (trans_stats['execyear']-trans_stats['fileyear']).dropna()
     translag_mass = np.histogram(translag_data,bins=translag_bins)[0].astype(np.float)/len(translag_data)
     translag_vals = 0.5*(translag_bins[:-1]+translag_bins[1:])
+    pd.DataFrame({
+        'bin_min': translag_bins[:-1],
+        'bin_max': translag_bins[1:],
+        'bin_mid': translag_vals,
+        'mass': translag_mass
+    }).to_csv('data/translag_dist.csv', index=False)
 
-    json.dump({'markup_data':list(markup_mass),'translag_data':list(translag_mass)},open('data/distributions.json','w+'),indent=4)

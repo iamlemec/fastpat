@@ -127,7 +127,7 @@ if args.stage <= 3:
 
   cur.execute('drop table if exists firm_life')
   cur.execute('create table firm_life (firm_num integer primary key, year_min int, year_max int, life_span int)')
-  cur.execute('insert into firm_life select firm_num,max(1950,min(year)),min(2012,max(year)),0 from firmyear_info where year>=1950 and (file_pnum>0 or source_pnum>0) group by firm_num order by firm_num')
+  cur.execute('insert into firm_life select firm_num,max(1950,min(year)),min(2016,max(year)),0 from firmyear_info where year>=1950 and (file_pnum>0 or source_pnum>0) group by firm_num order by firm_num')
   cur.execute('update firm_life set life_span=year_max-year_min+1')
 
   cur.execute('drop table if exists firm_hightech')
