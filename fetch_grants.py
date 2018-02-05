@@ -2,7 +2,6 @@
 
 import os
 import time
-import pdb
 
 grant_dir = 'grant_files'
 grant_fpath = 'meta_data/grant_files.txt'
