@@ -6,11 +6,14 @@ import time
 grant_dir = 'grant_files'
 grant_fpath = 'meta_data/grant_files.txt'
 grant_url_fmt = 'https://bulkdata.uspto.gov/data/patent/grant/redbook/bibliographic/{}/{}'
+overwrite = False
 
 url_list = []
 for line in open(grant_fpath):
     line = line.strip()
     path = os.path.join(grant_dir, line)
+    if not overwrite and os.path.isfile(path):
+        continue
 
     if line.startswith('ipgb'):
         year = line[4:8]
