@@ -348,8 +348,9 @@ def store_patent(pat):
     if not pat['patnum'].isnumeric() or len(pat['owner']) == 0:
         return True
 
+    pn = pat['patnum']
     i += 1
-
+    
     # store ipcs
     for (ipc, ver) in pat['ipclist']:
         ipc_chunker.insert(pn, ipc, ver)
