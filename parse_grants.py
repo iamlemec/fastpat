@@ -349,8 +349,9 @@ def store_patent(pat):
         return True
 
     pn = pat['patnum']
+
     i += 1
-    
+
     # store ipcs
     for (ipc, ver) in pat['ipclist']:
         ipc_chunker.insert(pn, ipc, ver)
@@ -371,7 +372,6 @@ def store_patent(pat):
     # limit
     if args.limit and i >= args.limit:
         return False
-
     return True
 
 # collect files
@@ -385,6 +385,12 @@ else:
 
 # parse by generation
 for fpath in file_list:
+
+    # Terminate upon reaching limit
+    if args.limit and i >= args.limit:
+        print("Reached limit.")
+        break
+
     (fdir, fname) = os.path.split(fpath)
     if fname.endswith('.dat'):
         gen = 1
