@@ -348,6 +348,8 @@ def store_patent(pat):
     if not pat['patnum'].isnumeric() or len(pat['owner']) == 0:
         return True
 
+    pn = pat['patnum']
+
     i += 1
 
     # store ipcs
@@ -370,7 +372,6 @@ def store_patent(pat):
     # limit
     if args.limit and i >= args.limit:
         return False
-
     return True
 
 # collect files
@@ -384,6 +385,12 @@ else:
 
 # parse by generation
 for fpath in file_list:
+
+    # Terminate upon reaching limit
+    if args.limit and i >= args.limit:
+        print("Reached limit.")
+        break
+
     (fdir, fname) = os.path.split(fpath)
     if fname.endswith('.dat'):
         gen = 1
