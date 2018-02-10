@@ -302,7 +302,7 @@ def parse_grants_gen3(fname_in, store_patent):
 parser = argparse.ArgumentParser(description='USPTO patent grant parser.')
 parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
-parser.add_argument('--limit', type=int, help='only parse n patents')
+parser.add_argument('--limit', type=int, default=None, help='only parse n patents')
 args = parser.parse_args()
 
 # database setup
@@ -387,7 +387,7 @@ else:
 for fpath in file_list:
 
     # Terminate upon reaching limit
-    if args.limit and i >= args.limit:
+    if args.limit is not None and i >= args.limit:
         print("Reached limit.")
         break
 

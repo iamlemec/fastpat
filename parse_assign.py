@@ -82,7 +82,7 @@ def convey_type(convey):
 parser = argparse.ArgumentParser(description='USPTO patent assignment parser.')
 parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
 parser.add_argument('--db', type=str, default=None, help='database file to store to')
-parser.add_argument('--limit', type=int, help='only parse n patents')
+parser.add_argument('--limit', type=int, default=None, help='only parse n patents')
 args = parser.parse_args()
 
 # connect to patent db
@@ -179,16 +179,22 @@ else:
 
 # do robust parsing
 for fpath in file_list:
+
+    # terminate on limit
+    if args.limit is not None and i >= args.limit:
+        print('Reached limit.')
+        break
+
     (fdir, fname) = os.path.split(fpath)
     print('Parsing %s' % fname)
-    i0 = i
-    o0 = o
-    p0 = p
+    i0, o0, p0 = i, o, p
+
     try:
         parse_gen3(fpath)
     except Exception as e:
         print('EXCEPTION OCCURRED!')
         print_exc()
+
     print('Found %d records, %d dropped, %d patents' % (i-i0, o-o0, p-p0))
     print('Total %d records, %d dropped, %d patents' % (i, o, p))
     print()
