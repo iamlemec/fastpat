@@ -4,7 +4,7 @@
 
 from collections import defaultdict
 import numpy as np
-import mmhash
+import xxhash
 
 import pyximport
 pyximport.install()
@@ -21,7 +21,7 @@ def tokenize(s):
     return s.split()
 
 def murmur(x):
-    return np.uint64(mmhash.get_unsigned_hash(x))
+    return np.uint64(xxhash.xxh64_intdigest(x))
 
 # compute actual simhash
 class Simhash:

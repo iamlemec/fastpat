@@ -7,9 +7,9 @@ for i in range(dim):
 cdef float v[dim]
 
 def simcore(hashish,weights):
-    cdef unsigned long ans
+    cdef unsigned long long ans
     cdef int n = len(hashish)
-    cdef unsigned long h
+    cdef unsigned long long h
     cdef float w
     cdef float q
 
