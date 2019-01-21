@@ -374,7 +374,7 @@ def store_patent(pat):
 
 # collect files
 if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-    targ_dir = 'grant_files' if len(args.target) == 0 else args.target[0]
+    targ_dir = 'data/grant_files' if len(args.target) == 0 else args.target[0]
     file_list = sorted(glob.glob('%s/*.dat' % targ_dir)) \
               + sorted(glob.glob('%s/pgb*.xml' % targ_dir)) \
               + sorted(glob.glob('%s/ipgb*.xml' % targ_dir))

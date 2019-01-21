@@ -205,7 +205,7 @@ def store_patent(pat):
 
 # collect files
 if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-    targ_dir = 'apply_files' if len(args.target) == 0 else args.target[0]
+    targ_dir = 'data/apply_files' if len(args.target) == 0 else args.target[0]
     file_list = sorted(glob.glob('%s/pab*.xml' % targ_dir)) + sorted(glob.glob('%s/ipab*.xml' % targ_dir))
 else:
     file_list = args.target

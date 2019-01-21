@@ -4,8 +4,8 @@ import os
 import sys
 import time
 
-apply_dir = 'apply_files'
-apply_fpath = 'meta_data/apply_files.txt'
+apply_dir = 'data/apply_files'
+apply_fpath = 'meta/apply_files.txt'
 apply_url_fmt = 'https://bulkdata.uspto.gov/data/patent/application/redbook/bibliographic/{}/{}'
 overwrite = False
 

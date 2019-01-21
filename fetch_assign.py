@@ -3,8 +3,8 @@
 import os
 import time
 
-assign_dir = 'assign_files'
-assign_fname = 'meta_data/assign_files.txt'
+assign_dir = 'data/assign_files'
+assign_fname = 'meta/assign_files.txt'
 assign_url_fmt = 'https://bulkdata.uspto.gov/data/patent/assignment/{}'
 overwrite = False
 

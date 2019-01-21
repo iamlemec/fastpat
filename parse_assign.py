@@ -172,7 +172,7 @@ def parse_gen3(fname_in):
 
 # collect files
 if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-    targ_dir = 'assign_files' if len(args.target) == 0 else args.target[0]
+    targ_dir = 'data/assign_files' if len(args.target) == 0 else args.target[0]
     file_list = sorted(glob.glob('%s/*.xml' % targ_dir))
 else:
     file_list = args.target

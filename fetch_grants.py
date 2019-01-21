@@ -3,8 +3,8 @@
 import os
 import time
 
-grant_dir = 'grant_files'
-grant_fpath = 'meta_data/grant_files.txt'
+grant_dir = 'data/grant_files'
+grant_fpath = 'meta/grant_files.txt'
 grant_url_fmt = 'https://bulkdata.uspto.gov/data/patent/grant/redbook/bibliographic/{}/{}'
 overwrite = False
 
