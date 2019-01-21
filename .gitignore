@@ -1,2 +1,7 @@
 .DS_Store
 *.pyc
+.ipynb_checkpoints
+__pychache__
+data
+export
+meta/PatentFullTextAPSDoc_GreenBook.pdf

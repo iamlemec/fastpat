@@ -1,0 +1,1 @@
+jQuery('table:nth-child(3) > tbody > tr > td:first-child > a').map(function() { return jQuery(this).attr('href'); }).toArray().join('\n')
