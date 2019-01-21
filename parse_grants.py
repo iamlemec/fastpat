@@ -11,7 +11,7 @@ from lxml import etree
 from copy import copy
 from collections import OrderedDict, defaultdict
 from itertools import chain
-from parse_common import clear, get_text, raw_text, ChunkInserter
+from parse_common import clear, get_text, raw_text, ChunkInserter, prune_patnum
 from traceback import print_exc
 
 # parse it up
@@ -305,12 +305,30 @@ parser.add_argument('--db', type=str, default=None, help='database file to store
 parser.add_argument('--limit', type=int, default=None, help='only parse n patents')
 args = parser.parse_args()
 
+# fields
+schema = {
+    'patnum': 'text', # Patent number
+    'filedate': 'text', # Application date
+    'grantdate': 'text', # Publication date
+    'class': 'text', # US patent classification
+    'ipc': 'text', # IPC codes
+    'ipcver': 'text', # IPC version info
+    'city': 'text', # Assignee city
+    'state': 'text', # State code
+    'country': 'text', # Assignee country
+    'owner': 'text', # Assignee name
+    'claims': 'int', # Independent claim
+    'title': 'text', # Title
+    'abstract': 'text', # Abstract
+    'gen': 'int', # USPTO data format
+}
+
 # database setup
 con = sqlite3.connect(args.db)
 cur = con.cursor()
-cur.execute('create table if not exists patent (patnum int, filedate text, grantdate text, class text, ipc text, ipcver text, city text, state text, country text, owner text, claims int, title text, abstract text, gen int)')
+cur.execute('create table if not exists patent (%s)' % ', '.join(['%s %s' % (k, v) for (k, v) in schema]))
 cur.execute('create unique index if not exists idx_patnum on patent (patnum)')
-cur.execute('create table if not exists ipc (patnum int, code text, version text)')
+cur.execute('create table if not exists ipc (patnum text, code text, version text)')
 cur.execute('create unique index if not exists ipc_pair on ipc (patnum,code)')
 cur.execute('create index if not exists ipc_patnum on ipc (patnum)')
 cur.execute('create index if not exists ipc_code on ipc (code)')
@@ -320,37 +338,15 @@ pat_chunker = ChunkInserter(con, table='patent')
 ipc_chunker = ChunkInserter(con, table='ipc')
 cit_chunker = ChunkInserter(con, table='cite')
 
-# fields
-fields = [
-    'patnum', # Patent number
-    'filedate', # Application date
-    'grantdate', # Publication date
-    'class', # US patent classification
-    'ipc', # IPC codes
-    'ipcver', # IPC version info
-    'city', # Assignee city
-    'state', # State code
-    'country', # Assignee country
-    'owner', # Assignee name
-    'claims', # Independent claim
-    'title', # Title
-    'abstract', # Abstract
-    'gen', # USPTO data format
-]
-
 # global adder
 i = 0
 def store_patent(pat):
     global i
+    i += 1
 
     # only utility patents with owners
-    pat['patnum'] = pat['patnum'].lstrip('0')[:7]
-    if not pat['patnum'].isnumeric() or len(pat['owner']) == 0:
-        return True
-
+    pat['patnum'] = prune_patnum(pat['patnum'])
     pn = pat['patnum']
-
-    i += 1
 
     # store ipcs
     for (ipc, ver) in pat['ipclist']:
@@ -363,16 +359,18 @@ def store_patent(pat):
     # store patent
     if len(pat['ipclist']) > 0:
         (pat['ipc'], pat['ipcver']) = pat['ipclist'][0]
-    pat_chunker.insert(*(pat.get(k, None) for k in fields))
+    pat_chunker.insert(*(pat.get(k, None) for k in schema))
 
     # output
     if i % 1000 == 0:
-        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, ci = %(city)15.15s, st = %(state)2s, ct = %(country)2s, ocl = %(class)s, ipc = %(ipc)-10s, ver = %(ipcver)s' % { k: pat.get(k, '') for k in fields })
+        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, ci = %(city)15.15s, st = %(state)2s, ct = %(country)2s, ocl = %(class)s, ipc = %(ipc)-10s, ver = %(ipcver)s' % {k: pat.get(k, '') for k in fields})
 
     # limit
     if args.limit and i >= args.limit:
+        print("Reached limit.")
         return False
-    return True
+    else:
+        return True
 
 # collect files
 if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
@@ -385,12 +383,6 @@ else:
 
 # parse by generation
 for fpath in file_list:
-
-    # Terminate upon reaching limit
-    if args.limit is not None and i >= args.limit:
-        print("Reached limit.")
-        break
-
     (fdir, fname) = os.path.split(fpath)
     if fname.endswith('.dat'):
         gen = 1
@@ -402,7 +394,7 @@ for fpath in file_list:
         gen = 3
         parser = parse_grants_gen3
     else:
-        raise(Exception('Unknown format'))
+        print('Unknown format: %s' % fname)
 
     print('Parsing %s, gen = %d' % (fname, gen))
     i0 = i

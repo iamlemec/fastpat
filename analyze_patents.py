@@ -14,7 +14,7 @@ parser.add_argument('--stage_min', type=int, default=0, help='min stage to run')
 parser.add_argument('--stage_max', type=int, default=sys.maxsize, help='max stage to run')
 parser.add_argument('--base_year', type=int, default=1990, help='start year of window')
 parser.add_argument('--period_len', type=int, default=10, help='length (years) of window')
-parser.add_argument('--pclass', type=str, default='class', help='patent classification scheme')
+parser.add_argument('--pclass', type=str, default='ipc', help='patent classification scheme')
 args = parser.parse_args()
 
 # translate into flags
@@ -54,7 +54,7 @@ if run_flags[0]:
     datf_idx = pd.read_sql('select * from firmyear_index',con)
     firm_info = pd.read_sql('select * from firm_life',con)
     grant_info = pd.read_sql('select * from patent_info',con)
-    trans_info = pd.read_sql('select * from assign_info where execyear!=\'\'',con)
+    trans_info = pd.read_sql('select * from assign_info where execyear !=""',con)
     con.close()
 
     # basic stats
@@ -63,7 +63,6 @@ if run_flags[0]:
     datf_idx['naics2'] = datf_idx['naics3']/10
     datf_idx['trans_pnum'] = datf_idx['source_pnum']+datf_idx['dest_pnum']
     datf_idx['trans_net'] = datf_idx['dest_pnum']-datf_idx['source_pnum']
-    datf_idx['ht_bin'] = datf_idx['high_tech'] > 0.9
     datf_idx['cost'] = datf_idx['revenue'] - datf_idx['income']
     datf_idx['profit'] = noinf(datf_idx['income']/datf_idx['cost'])
     datf_idx['prod'] = noinf(datf_idx['income']/datf_idx['employ'])
@@ -116,9 +115,9 @@ if run_flags[1]:
     # data selection parameters
     index_cols = ['firm_num']
     type_int_cols = ['year','naics2','naics3','age']
-    type_float_cols = ['employ','revenue','income','stock','mktval','intan','assets','mode_class_frac','mode_ipc_frac','high_tech']
-    type_bool_cols = ['size_bin','age_bin','ht_bin']
-    type_str_cols = ['mode_class','mode_ipc']
+    type_float_cols = ['employ','revenue','income','stock','mktval','intan','assets','mode_ipc_frac']
+    type_bool_cols = ['size_bin','age_bin']
+    type_str_cols = ['mode_ipc']
     sum_float_cols = ['assets','capx','cash','cogs','deprec','intan','debt','employ','income','revenue','sales','rnd','fcost','mktval','acquire',
                       'file_pnum','grant_pnum','source_pnum','dest_pnum','trans_pnum','expire_pnum','n_cited','n_self_cited','n_ext_cited','n_citing']
     type_cols = type_int_cols + type_float_cols + type_bool_cols + type_str_cols
@@ -161,7 +160,7 @@ if run_flags[1]:
         firm_totals[col+'_end'] = firm_end[col]
         firm_totals[col+'_change'] = firm_end[col] - firm_start[col]
         firm_totals[col+'_lgrowth'] = noinf(np.log(firm_totals[col+'_end']/firm_totals[col+'_start'])/(firm_totals['obs_years']-1))
-        firm_totals[col+'_lgrowth'].ix[firm_totals['entered']|firm_totals['exited']] = np.nan
+        firm_totals[col+'_lgrowth'][firm_totals['entered']|firm_totals['exited']] = np.nan
         firm_totals[col+'_abs'] = np.abs(firm_totals[col+'_lgrowth'])
 
     # general firm statistics
@@ -205,7 +204,7 @@ if run_flags[2]:
     print('Firm type breakdowns')
 
     firm_incumbents = firm_totals[~firm_totals['entered']]
-    firm_incumbents = firm_incumbents.drop(['entered', 'mode_class', 'mode_ipc'], axis=1)
+    firm_incumbents = firm_incumbents.drop(['entered','mode_ipc'], axis=1)
 
     firm_size_groups = firm_incumbents.groupby(('size_bin'))
     firm_age_groups = firm_incumbents.groupby(('age_bin'))
@@ -240,7 +239,7 @@ if run_flags[3]:
     # merge in transfers
     trans_cols = ['size_bin','age_bin','size_rank','age_rank','stock','age']
     datf_idx_sub = datf_idx[['firm_num','year']+trans_cols]
-    trans_merge = pd.merge(trans_info,grant_info[['patnum','class','ipc','high_tech','fileyear','grantyear']],how='left',left_on='patnum',right_on='patnum')
+    trans_merge = pd.merge(trans_info,grant_info[['patnum','ipc','fileyear','grantyear']],how='left',left_on='patnum',right_on='patnum')
     trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['dest_fn','execyear'],right_on=['firm_num','year'])
     trans_merge = trans_merge.rename(columns=dict([(s,s+'_dest') for s in ['firm_num']+trans_cols]))
     trans_merge = pd.merge(trans_merge,datf_idx_sub,how='left',left_on=['source_fn','execyear'],right_on=['firm_num','year'])
@@ -293,9 +292,7 @@ if run_flags[4]:
     grant_class_base['class_age'] = base_year - grant_class_base['class_born']
 
     # modal class group stats
-    other_code = 'ipc' if pclass == 'class' else 'class'
-    other_mode = 'mode_' + other_code
-    class_groups = firm_totals.drop([other_mode],axis=1).groupby(mode_pclass)
+    class_groups = firm_totals.groupby(mode_pclass)
     class_sums = class_groups.sum()
     class_means = class_groups.mean()
     class_medians = class_groups.median()
@@ -415,4 +412,3 @@ if run_flags[5]:
         'bin_mid': translag_vals,
         'mass': translag_mass
     }).to_csv('data/translag_dist.csv', index=False)
-

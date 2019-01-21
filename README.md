@@ -2,6 +2,8 @@ Parse patent grant and assignment info from USPTO and match with Compustat data.
 
 Additionally, cluster patents by firm name. Uses locality-sensitive hashing as a first pass then find components in the graph induced by a Levenshtein distance threshhold.
 
+I also maintain a simplified repository with only the parsing code, which is kept roughly in sync with this, over at: [patents_simple](https://github.com/iamlemec/patents_simple). *Note that this can also parse Chinese patent data!*
+
 ## File descriptions
 
 * Acquiring data
@@ -39,4 +41,3 @@ Additionally, cluster patents by firm name. Uses locality-sensitive hashing as a
 * `assign_files`: patent reassignment data from Google/USPTO
 * `maint_files`: patent maintentance data from Google/USPTO
 * `compustat_files`: Compustat data since 1950 from WRDS
-

@@ -9,6 +9,9 @@ apply_fpath = 'meta_data/apply_files.txt'
 apply_url_fmt = 'https://bulkdata.uspto.gov/data/patent/application/redbook/bibliographic/{}/{}'
 overwrite = False
 
+if not os.path.exists(apply_dir):
+    os.mkdir(apply_dir)
+
 url_list = []
 for line in open(apply_fpath):
     line = line.strip()

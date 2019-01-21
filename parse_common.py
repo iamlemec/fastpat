@@ -15,6 +15,18 @@ def clear(elem):
     while elem.getprevious() is not None:
         del elem.getparent()[0]
 
+# standard way to pruce patent numbers (allows for all types)
+def prune_patnum(pn):
+    ret = re.match(r'([a-zA-Z]{1,2})?([0-9]+)', pn)
+    if ret is None:
+        prefix = ''
+        patnum = pn
+    else:
+        prefix, patnum = ret.groups()
+        prefix = '' if prefix is None else prefix
+    patnum = patnum.lstrip('0')[:7]
+    return prefix + patnum
+
 # insert in chunks
 class ChunkInserter:
     def __init__(self, con, table=None, cmd=None, cur=None, chunk_size=1000, output=False):

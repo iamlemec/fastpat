@@ -1,12 +1,13 @@
 # name matching using locality-sensitive hashing (simhash)
 # these are mostly idempotent
 
-from itertools import chain, repeat
+from itertools import chain, repeat, product
 from collections import defaultdict
 from math import ceil
 
 import sqlite3
 import numpy as np
+import pandas as pd
 import networkx as nx
 try:
     from distance.cdistance import levenshtein
@@ -184,38 +185,43 @@ def find_components(con,cur,thresh=0.85,store=True):
 def merge_components(con,cur):
     print('merging firm components')
 
-    # match owners to firms
+    print('matching owners to firms')
     cur.execute('drop table if exists owner_firm')
     cur.execute('create table owner_firm (ownerid int, firm_num int)')
     cur.execute('insert into owner_firm select ownerid,compid+1000000 from owner left join component using(ownerid)')
     cur.execute('update owner_firm set firm_num=ownerid where firm_num is null')
 
+    print('merging into compustat')
     cur.execute('drop table if exists compustat_merge')
     cur.execute("""create table compustat_merge as select compustat.*,compustat_owner.ownerid,owner_firm.firm_num
                    from compustat left join compustat_owner using(gvkey,year)
                    left join owner_firm using(ownerid)""")
 
+    print('merging into patents')
     cur.execute('drop table if exists patent_merge')
     cur.execute("""create table patent_merge as select patent.*,patent_owner.ownerid,owner_firm.firm_num
                    from patent left join patent_owner using(patnum)
                    left join owner_firm using(ownerid)""")
 
+    print('merging into assignments')
     cur.execute('drop table if exists assign_merge')
     cur.execute("""create table assign_merge as select assign_use.*,assign_owner.assigneeid,assign_owner.assignorid,assignee_firm.firm_num as dest_fn,assignor_firm.firm_num as source_fn
                    from assign_use left join assign_owner on assign_use.assignid=assign_owner.assignid
                    left join owner_firm as assignee_firm on assign_owner.assigneeid=assignee_firm.ownerid
                    left join owner_firm as assignor_firm on assign_owner.assignorid=assignor_firm.ownerid""")
 
-    # aggregate to yearly
+    print('generating simplified patents')
     cur.execute('drop table if exists patent_basic')
-    cur.execute('create table patent_basic (patnum integer primary key, firm_num int, fileyear int, grantyear int, state text, country text, class text, ipc text)')
-    cur.execute("insert into patent_basic select patnum,firm_num,substr(filedate,1,4),substr(grantdate,1,4),state,country,substr(class,1,3),substr(ipc,1,3) from patent_merge where typeof(patnum) is 'integer'")
+    cur.execute('create table patent_basic (patnum integer primary key, firm_num int, fileyear int, grantyear int, state text, country text, ipc text, ipcver text)')
+    cur.execute("insert into patent_basic select patnum,firm_num,substr(filedate,1,4),substr(grantdate,1,4),state,country,ipc,ipcver from patent_merge where typeof(patnum) is 'integer'")
     cur.execute('create unique index patent_basic_idx on patent_basic(patnum)')
 
+    print('generating simplified assignments')
     cur.execute('drop table if exists assign_info')
     cur.execute('create table assign_info (assignid integer primary key, patnum int, source_fn int, dest_fn int, execyear int, recyear int, state text, country text)')
-    cur.execute('insert into assign_info select assignid,patnum,source_fn,dest_fn,substr(execdate,1,4),substr(recdate,1,4),assignee_state,assignee_country from assign_merge')
+    cur.execute("insert into assign_info select assignid,patnum,source_fn,dest_fn,substr(execdate,1,4),substr(recdate,1,4),assignee_state,assignee_country from assign_merge where typeof(patnum) is 'integer'")
 
+    print('generating assignments at transaction level')
     cur.execute('drop table if exists assign_bulk')
     cur.execute('create table assign_bulk (source_fn int, dest_fn int, execyear int, ntrans int)')
     cur.execute('insert into assign_bulk select source_fn,dest_fn,execyear,count(*) from assign_info group by source_fn,dest_fn,execyear')
@@ -223,13 +229,51 @@ def merge_components(con,cur):
     con.commit()
 
 @autodb
-def get_names(con,cur,olist=[]):
-    return cur.execute('select * from owner where ownerid in (%s)' % ','.join([str(o) for o in olist])).fetchall()
+def get_names(con,cur=None,olist=[]):
+    ostr = ','.join([str(o) for o in olist])
+    return pd.read_sql(f'select * from owner where ownerid in ({ostr})',con)
 
 @autodb
-def get_component(con,cur,compid=0):
-    owners = [x for (x,) in cur.execute('select ownerid from component where compid=?',(compid,)).fetchall()]
-    return cur.execute('select * from owner where ownerid in (%s)' % ','.join([str(o) for o in owners])).fetchall()
+def get_component(con,cur=None,compid=0):
+    owners = pd.read_sql(f'select ownerid from component where compid={compid}',con)['ownerid']
+    return get_names(olist=owners)
+
+# distance metric
+def affin(name1,name2):
+    maxlen = max(len(name1),len(name2))
+    ldist = levenshtein(name1,name2)
+    return float(ldist)/maxlen if maxlen != 0 else 1.0
+
+@autodb
+def get_distances(con,cur=None,compid=0):
+    import scipy.sparse as sp
+    from sklearn import cluster
+
+    owners = pd.read_sql(f'select * from component where compid={compid}',con)
+    ostr = ','.join([str(o) for o in owners['ownerid']])
+    omap = {o: i for i, o in enumerate(owners['ownerid'])}
+    owners['oid'] = owners['ownerid'].map(omap)
+    nown = len(owners)
+
+    pairs = pd.read_sql(f'select * from pair where ownerid1 in ({ostr}) or ownerid2 in ({ostr})',con)
+    pairs['dist'] = pairs.apply(lambda df: affin(df['name1'],df['name2']),axis=1)
+    pairs['oid1'] = pairs['ownerid1'].map(omap)
+    pairs['oid2'] = pairs['ownerid2'].map(omap)
+
+    dist = pd.DataFrame([(o1,o2) for o1,o2 in product(owners['ownerid'],owners['ownerid'])],columns=['ownerid1','ownerid2'])
+    dist = dist.join(pairs.set_index(['ownerid1','ownerid2'])['dist'],on=['ownerid1','ownerid2']).fillna(0.0)
+    amat = dist['dist'].values.reshape([nown,nown])
+    # amat = sp.coo_matrix((pairs['dist'],(pairs['oid1'],pairs['oid2'])))
+
+    # fit = cluster.SpectralClustering(affinity='precomputed').fit(amat)
+    fit = cluster.AffinityPropagation(affinity='precomputed').fit(amat)
+    # fit = cluster.DBSCAN(metric='precomputed').fit(amat)
+    nclust = np.max(fit.labels_)+1
+    cids = [np.nonzero(fit.labels_==i)[0] for i in range(nclust)]
+    cown = [owners[owners['oid'].isin(c)]['ownerid'] for c in cids]
+    cname = [get_names(olist=c) for c in cown]
+
+    return owners, pairs, cname
 
 if __name__ == "__main__":
     import argparse
@@ -245,4 +289,3 @@ if __name__ == "__main__":
     owner_cluster()
     find_components()
     merge_components()
-

@@ -8,6 +8,9 @@ assign_fname = 'meta_data/assign_files.txt'
 assign_url_fmt = 'https://bulkdata.uspto.gov/data/patent/assignment/{}'
 overwrite = False
 
+if not os.path.exists(assign_dir):
+    os.mkdir(assign_dir)
+
 url_list = []
 for line in open(assign_fname):
     line = line.strip()

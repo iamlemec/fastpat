@@ -8,6 +8,9 @@ grant_fpath = 'meta_data/grant_files.txt'
 grant_url_fmt = 'https://bulkdata.uspto.gov/data/patent/grant/redbook/bibliographic/{}/{}'
 overwrite = False
 
+if not os.path.exists(grant_dir):
+    os.mkdir(grant_dir)
+
 url_list = []
 for line in open(grant_fpath):
     line = line.strip()
