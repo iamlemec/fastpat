@@ -326,7 +326,7 @@ schema = {
 # database setup
 con = sqlite3.connect(args.db)
 cur = con.cursor()
-cur.execute('create table if not exists patent (%s)' % ', '.join(['%s %s' % (k, v) for (k, v) in schema]))
+cur.execute('create table if not exists patent (%s)' % ', '.join(['%s %s' % (k, v) for k, v in schema.items()]))
 cur.execute('create unique index if not exists idx_patnum on patent (patnum)')
 cur.execute('create table if not exists ipc (patnum text, code text, version text)')
 cur.execute('create unique index if not exists ipc_pair on ipc (patnum,code)')
@@ -363,7 +363,7 @@ def store_patent(pat):
 
     # output
     if i % 1000 == 0:
-        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, ci = %(city)15.15s, st = %(state)2s, ct = %(country)2s, ocl = %(class)s, ipc = %(ipc)-10s, ver = %(ipcver)s' % {k: pat.get(k, '') for k in fields})
+        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, ci = %(city)15.15s, st = %(state)2s, ct = %(country)2s, ocl = %(class)s, ipc = %(ipc)-10s, ver = %(ipcver)s' % {k: pat.get(k, '') for k in schema})
 
     # limit
     if args.limit and i >= args.limit:
