@@ -3,13 +3,13 @@
 import os
 import time
 
-grant_dir = 'data/grant_files'
+grant_dir = 'data/grant'
 grant_fpath = 'meta/grant_files.txt'
 grant_url_fmt = 'https://bulkdata.uspto.gov/data/patent/grant/redbook/bibliographic/{}/{}'
 overwrite = False
 
 if not os.path.exists(grant_dir):
-    os.mkdir(grant_dir)
+    os.makedirs(grant_dir)
 
 url_list = []
 for line in open(grant_fpath):
@@ -28,14 +28,14 @@ for line in open(grant_fpath):
     url = grant_url_fmt.format(year, line)
     url_list.append((line, path, url))
 
-for (name, path, url) in sorted(url_list):
-    print('Fetching %s' % name)
-    os.system('curl -o %s %s' % (path, url))
+for name, path, url in sorted(url_list):
+    print(f'Fetching {name}')
+    os.system(f'curl -o {path} {url}')
     print()
     time.sleep(10)
 
 # to extract:
-# cd grant_files
-# ls -1 | xargs -n 1 unzip
+# cd data/grant
+# ls | xargs -n 1 unzip
 # rm *.txt
 # rm *.html

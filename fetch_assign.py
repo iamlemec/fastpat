@@ -3,7 +3,7 @@
 import os
 import time
 
-assign_dir = 'data/assign_files'
+assign_dir = 'data/assign'
 assign_fname = 'meta/assign_files.txt'
 assign_url_fmt = 'https://bulkdata.uspto.gov/data/patent/assignment/{}'
 overwrite = False
@@ -23,11 +23,12 @@ for line in open(assign_fname):
     url = assign_url_fmt.format(line)
     url_list.append((line, path, url))
 
-for (name, path, url) in sorted(url_list):
-    print('Fetching %s' % name)
-    os.system('curl -o %s %s' % (path, url))
+for name, path, url in sorted(url_list):
+    print(f'Fetching {name}')
+    os.system(f'curl -o {path} {url}')
     print()
-    time.sleep(10)
+    time.sleep(1)
 
 # extract files
-# ls -1 | xargs -n 1 unzip
+# cd data/assign
+# ls | xargs -n 1 unzip

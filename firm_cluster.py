@@ -14,7 +14,7 @@ try:
 except:
     from distance import levenshtein
 
-from name_standardize import name_standardize_weak, name_standardize_strong
+from standardize import standardize_weak, standardize_strong
 import simhash as sh
 
 #
@@ -50,19 +50,19 @@ def generate_names(con,cur):
     cur.execute('drop table if exists compustat_std')
     cur.execute('create table compustat_std (gvkey int, year int, namestd text)')
     ret = cur.execute('select gvkey,year,name from compustat')
-    cur.executemany('insert into compustat_std values (?,?,?)',[(gvkey,year,name_standardize_weak(owner)) for (gvkey,year,owner) in ret])
+    cur.executemany('insert into compustat_std values (?,?,?)',[(gvkey,year,standardize_weak(owner)) for (gvkey,year,owner) in ret])
 
     # standardize patent names
     cur.execute('drop table if exists patent_std')
     cur.execute('create table patent_std (patnum int, namestd int)')
     ret = cur.execute('select patnum,owner from patent')
-    cur.executemany('insert into patent_std values (?,?)',[(patnum,name_standardize_weak(owner)) for (patnum,owner) in ret])
+    cur.executemany('insert into patent_std values (?,?)',[(patnum,standardize_weak(owner)) for (patnum,owner) in ret])
 
     # standardize assignment names
     cur.execute('drop table if exists assign_std')
     cur.execute('create table assign_std (assignid int, assigneestd int, assignorstd)')
     ret = cur.execute('select assignid,assignor,assignee from assign_use')
-    cur.executemany('insert into assign_std values (?,?,?)',[(assignid,name_standardize_weak(assignor),name_standardize_weak(assignee)) for (assignid,assignor,assignee) in ret])
+    cur.executemany('insert into assign_std values (?,?,?)',[(assignid,standardize_weak(assignor),standardize_weak(assignee)) for (assignid,assignor,assignee) in ret])
 
     # store unique names
     cur.execute('drop table if exists owner')
@@ -149,13 +149,13 @@ def find_components(con,cur,thresh=0.85,store=True):
 
     for (o1,o2,n1,n2) in cur.execute(cmd):
         if o1 not in name_dict:
-            n1s = name_standardize_strong(n1)
+            n1s = standardize_strong(n1)
             name_dict[o1] = n1
             name_std[o1] = n1s
         else:
             n1s = name_std[o1]
         if o2 not in name_dict:
-            n2s = name_standardize_strong(n2)
+            n2s = standardize_strong(n2)
             name_dict[o2] = n2
             name_std[o2] = n2s
         else:
@@ -212,8 +212,8 @@ def merge_components(con,cur):
 
     print('generating simplified patents')
     cur.execute('drop table if exists patent_basic')
-    cur.execute('create table patent_basic (patnum integer primary key, firm_num int, fileyear int, grantyear int, state text, country text, ipc text, ipcver text)')
-    cur.execute("insert into patent_basic select patnum,firm_num,substr(filedate,1,4),substr(grantdate,1,4),state,country,ipc,ipcver from patent_merge where typeof(patnum) is 'integer'")
+    cur.execute('create table patent_basic (patnum text, firm_num int, fileyear int, grantyear int, state text, country text, ipc text, ipcver text)')
+    cur.execute("insert into patent_basic select patnum,firm_num,substr(filedate,1,4),substr(grantdate,1,4),state,country,ipc,ipcver from patent_merge")
     cur.execute('create unique index patent_basic_idx on patent_basic(patnum)')
 
     print('generating simplified assignments')
