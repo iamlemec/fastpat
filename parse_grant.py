@@ -7,7 +7,6 @@ import sys
 import glob
 import argparse
 import sqlite3
-from lxml.etree import XMLPullParser
 from collections import defaultdict
 from itertools import chain
 from traceback import print_exc
@@ -95,7 +94,7 @@ def parse_grant_gen1(fname):
                 pat['country'] = buf[:2]
         elif tag == 'PNO':
             if sec == 'UREF':
-                pat['citlist'].append(buf)
+                citlist.append(buf.strip())
 
         # stage next tag and buf
         tag = ntag
@@ -264,16 +263,10 @@ tabsig = ', '.join([f'{k} {v}' for k, v in schema.items()])
 # database setup
 con = sqlite3.connect(args.db)
 cur = con.cursor()
-cur.execute(f'create table if not exists patent ({tabsig})')
-cur.execute('create unique index if not exists idx_patnum on patent (patnum)')
-cur.execute('create table if not exists ipc (patnum text, code text, version text)')
-cur.execute('create unique index if not exists ipc_pair on ipc (patnum,code)')
-cur.execute('create index if not exists ipc_patnum on ipc (patnum)')
-cur.execute('create index if not exists ipc_code on ipc (code)')
-cur.execute('create table if not exists cite (src int, dst int)')
-cur.execute('create unique index if not exists cite_pair on cite (src,dst)')
-pat_chunker = ChunkInserter(con, table='patent')
-ipc_chunker = ChunkInserter(con, table='ipc')
+cur.execute(f'CREATE TABLE IF NOT EXISTS grant ({tabsig})')
+cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_patnum ON grant (patnum)')
+cur.execute('CREATE TABLE IF NOT EXISTS cite (src int, dst int)')
+pat_chunker = ChunkInserter(con, table='grant')
 cit_chunker = ChunkInserter(con, table='cite')
 
 # global adder
@@ -282,26 +275,17 @@ def store_patent(pat):
     global i
     i += 1
 
-    # only utility patents with owners
-    pat['patnum'] = prune_patnum(pat['patnum'])
-    pn = pat['patnum']
-
-    # store ipcs
-    for (ipc, ver) in pat['ipclist']:
-        ipc_chunker.insert(pn, ipc, ver)
-
     # store cites
+    pn = pat['patnum']
     for cite in pat['citlist']:
         cit_chunker.insert(pn, cite)
 
     # store patent
-    if len(pat['ipclist']) > 0:
-        (pat['ipc'], pat['ipcver']) = pat['ipclist'][0]
     pat_chunker.insert(*(pat.get(k, None) for k in schema))
 
     # output
     if args.output is not None and i % args.output == 0:
-        print('pn = %(patnum)s, fd = %(filedate)s, gd = %(grantdate)s, on = %(owner)30.30s, ci = %(city)15.15s, st = %(state)2s, ct = %(country)2s, ocl = %(class)s, ipc = %(ipc)-10s, ver = %(ipcver)s' % {k: pat.get(k, '') for k in schema})
+        print('pn = {patnum}, ad = {appdate}, pd = {pubdate}, on = {owner:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}, ipc = {ipc1}, ver = {ipcver}'.format(**{k: pat.get(k, '') for k in schema}))
 
     # limit
     if args.limit is not None and i >= args.limit:
@@ -312,8 +296,8 @@ def store_patent(pat):
 
 # collect files
 if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-    targ_dir = 'data/grant_files' if len(args.target) == 0 else args.target[0]
-    file_list = sorted(glob.glob(f'{targ_dir}/*.dat') + sorted(glob.glob(f'{targ_dir}/pgb*.xml') + sorted(glob.glob(f'{targ_dir}/ipgb*.xml')
+    targ_dir = 'data/grant' if len(args.target) == 0 else args.target[0]
+    file_list = sorted(glob.glob(f'{targ_dir}/*.dat')) + sorted(glob.glob(f'{targ_dir}/pgb*.xml')) + sorted(glob.glob(f'{targ_dir}/ipgb*.xml'))
 else:
     file_list = args.target
 
@@ -322,7 +306,7 @@ for fpath in file_list:
     fdir, fname = os.path.split(fpath)
     if fname.endswith('.dat'):
         gen = 1
-        parser = parse_grants_gen1
+        parser = parse_grant_gen1
     elif fname.startswith('pgb'):
         gen = 2
         parser = lambda fp: parse_wrapper(fp, 'PATDOC', parse_grant_gen2)
@@ -344,6 +328,5 @@ for fpath in file_list:
 
 # commit to db and close
 pat_chunker.commit()
-ipc_chunker.commit()
 cit_chunker.commit()
 con.close()

@@ -2,6 +2,9 @@
 ## common parsing tools
 ##
 
+import re
+from lxml.etree import XMLPullParser
+
 # get descendent text
 def get_text(parent,tag,default=''):
     child = parent.find(tag)
@@ -67,18 +70,7 @@ class ChunkInserter:
     def insertmany(self,args):
         self.items += args
         if len(self.items) >= self.chunk_size:
-            self.com# standard way to pruce patent numbers (allows for all types)
-def prune_patnum(pn):
-    ret = re.match(r'([a-zA-Z]{1,2}|0)?([0-9]+)', pn)
-    if ret is None:
-        prefix = ''
-        patnum = pn
-    else:
-        prefix, patnum = ret.groups()
-        prefix = '' if prefix is None else prefix
-    patnum = patnum[:7].lstrip('0')
-    return prefix + patnum
-mit()
+            self.commit()
             return True
         else:
             return False
