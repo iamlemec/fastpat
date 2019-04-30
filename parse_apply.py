@@ -11,11 +11,12 @@ from lxml.etree import XMLPullParser
 from collections import defaultdict
 from itertools import chain
 from traceback import print_exc
-from parse_common import *
+from parse_tools import *
 
-def parse_apply_gen2(elem):
+def parse_apply_gen2(elem, fname):
     pat = defaultdict(str)
     pat['gen'] = 2
+    pat['file'] = fname
 
     # top-level section
     bib = elem.find('subdoc-bibliographic-information')
@@ -37,12 +38,11 @@ def parse_apply_gen2(elem):
     pat['title'] = get_text(tech, 'title-of-invention')
 
     # ipc code
+    pat['ipcs'] = []
     ipcsec = tech.find('classification-ipc')
     if ipcsec is not None:
         pat['ipcver'] = get_text(ipcsec, 'classification-ipc-edition').lstrip('0')
-        ipclist = list(gen2_ipc(ipcsec))
-        pat['ipc1'] = ipclist.pop(0) if len(ipclist) > 0 else ''
-        pat['ipc2'] = ';'.join(ipclist)
+        pat['ipcs'] = list(gen2_ipc(ipcsec))
 
     # assignee name
     pat['appname'] = get_text(bib, 'assignee/organization-name')
@@ -66,9 +66,10 @@ def parse_apply_gen2(elem):
     # roll it in
     return store_patent(pat)
 
-def parse_apply_gen3(elem):
+def parse_apply_gen3(elem, fname):
     pat = defaultdict(str)
     pat['gen'] = 3
+    pat['file'] = fname
 
     # top-level section
     bib = elem.find('us-bibliographic-data-application')
@@ -89,18 +90,16 @@ def parse_apply_gen3(elem):
     pat['title'] = get_text(bib, 'invention-title')
 
     # ipc code
-    ipclist = []
+    pat['ipcs'] = []
     ipcsec = bib.find('classification-ipc')
     if ipcsec is not None:
         pat['ipcver'] = get_text(ipcsec, 'edition').lstrip('0')
-        ipclist = list(gen3a_ipc(ipcsec))
+        pat['ipcs'] = list(gen3a_ipc(ipcsec))
     else:
         ipcsec = bib.find('classifications-ipcr')
         if ipcsec is not None:
             pat['ipcver'] = get_text(ipcsec, 'classification-ipcr/ipc-version-indicator/date')
-            ipclist = list(gen3r_ipc(ipcsec))
-    pat['ipc1'] = ipclist.pop(0) if len(ipclist) > 0 else ''
-    pat['ipc2'] = ';'.join(ipclist)
+            pat['ipcs'] = list(gen3r_ipc(ipcsec))
 
     # first inventor address
     address = bib.find('parties/applicants/applicant/addressbook/address')
@@ -134,8 +133,7 @@ schema = {
     'appname': 'text', # Assignee name
     'pubnum': 'text', # Publication number
     'pubdate': 'text', # Publication date
-    'ipc1': 'text', # Main IPC code
-    'ipc2': 'text', # IPC codes
+    'ipc': 'text', # Main IPC code
     'ipcver': 'text', # IPC version info
     'city': 'text', # Assignee city
     'state': 'text', # State code
@@ -143,6 +141,7 @@ schema = {
     'title': 'text', # Title
     'abstract': 'text', # Abstract
     'gen': 'int', # USPTO data format
+    'file': 'text', # path to source file
 }
 tabsig = ', '.join([f'{k} {v}' for k, v in schema.items()])
 
@@ -151,7 +150,9 @@ con = sqlite3.connect(args.db)
 cur = con.cursor()
 cur.execute(f'CREATE TABLE IF NOT EXISTS apply ({tabsig})')
 cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_appnum ON apply (appnum)')
-chunker = ChunkInserter(con, table='apply')
+cur.execute('CREATE TABLE IF NOT EXISTS ipc_apply (appnum text, ipc text, rank int, ver text)')
+pat_chunker = ChunkInserter(con, table='apply')
+ipc_chunker = ChunkInserter(con, table='ipc_apply')
 
 # chunking express
 i = 0
@@ -159,12 +160,19 @@ def store_patent(pat):
     global i
     i += 1
 
+    an, iv = pat['appnum'], pat['ipcver']
+
+    # store ipcs
+    for j, ipc in enumerate(pat['ipcs']):
+        if j == 0: pat['ipc'] = ipc
+        ipc_chunker.insert(an, ipc, j, iv)
+
     # store patent
-    chunker.insert(*(pat.get(k, None) for k in schema))
+    pat_chunker.insert(*(pat[k] for k in schema))
 
     # output
     if args.output is not None and i % args.output == 0:
-        print('an = {appnum}, fd = {appdate}, on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}, ipc = {ipc1}, ver = {ipcver}'.format(**{k: pat.get(k, '') for k in schema}))
+        print('an = {appnum}, fd = {appdate}, on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}, ipc = {ipc}, ver = {ipcver}'.format(**{k: pat.get(k, '') for k in schema}))
 
     # limit
     if args.limit is not None and i >= args.limit:
@@ -190,7 +198,7 @@ for fpath in file_list:
         parser = lambda fp: parse_wrapper(fp, 'patent-application-publication', parse_apply_gen2)
     elif fname.startswith('ipab'):
         gen = 3
-        parser = lambda fp: parse_wrapper(fp, 'us-patent-application', parse_grants_gen3)
+        parser = lambda fp: parse_wrapper(fp, 'us-patent-application', parse_apply_gen3)
     else:
         raise Exception('Unknown format')
 
@@ -198,7 +206,7 @@ for fpath in file_list:
     print(f'Parsing {fname}, gen {gen}')
     i0 = i
     try:
-        parse(fpath)
+        parser(fpath)
     except Exception as e:
         print('EXCEPTION OCCURRED!')
         print_exc()
@@ -206,7 +214,8 @@ for fpath in file_list:
     print()
 
 # commit to db and close
-chunker.commit()
+pat_chunker.commit()
+ipc_chunker.commit()
 con.close()
 
 print(f'Found {i} patents')
