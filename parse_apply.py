@@ -42,7 +42,7 @@ def parse_apply_gen2(elem, fname):
     ipcsec = tech.find('classification-ipc')
     if ipcsec is not None:
         pat['ipcver'] = get_text(ipcsec, 'classification-ipc-edition').lstrip('0')
-        pat['ipcs'] = list(gen2_ipc(ipcsec))
+        pat['ipcs'] = [ip for ip in gen2_ipc(ipcsec)]
 
     # assignee name
     pat['appname'] = get_text(bib, 'assignee/organization-name')
@@ -94,12 +94,12 @@ def parse_apply_gen3(elem, fname):
     ipcsec = bib.find('classification-ipc')
     if ipcsec is not None:
         pat['ipcver'] = get_text(ipcsec, 'edition').lstrip('0')
-        pat['ipcs'] = list(gen3a_ipc(ipcsec))
+        pat['ipcs'] = [ip for ip in gen3a_ipc(ipcsec)]
     else:
         ipcsec = bib.find('classifications-ipcr')
         if ipcsec is not None:
             pat['ipcver'] = get_text(ipcsec, 'classification-ipcr/ipc-version-indicator/date')
-            pat['ipcs'] = list(gen3r_ipc(ipcsec))
+            pat['ipcs'] = [ip for ip in gen3r_ipc(ipcsec)]
 
     # first inventor address
     address = bib.find('parties/applicants/applicant/addressbook/address')
