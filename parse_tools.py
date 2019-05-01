@@ -112,7 +112,7 @@ def prune_patnum(pn):
         patnum = pn
     else:
         prefix, patnum = ret.groups()
-        prefix = '' if prefix is None else prefix
+        prefix = '' if (prefix is None or prefix is '0') else prefix
     patnum = patnum[:7].lstrip('0')
     return prefix + patnum
 
@@ -181,7 +181,6 @@ def gen3_cite(refs, prefix):
 def gen3_assign(patents):
     for pat in patents:
         for doc in pat.findall('document-id'):
-            # natl = get_text(cite, 'country')
             kind = get_text(doc, 'kind')
             pnum = get_text(doc, 'doc-number')
             if not kind.startswith('X'):

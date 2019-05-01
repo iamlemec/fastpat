@@ -172,7 +172,7 @@ def store_patent(pat):
 
     # output
     if args.output is not None and i % args.output == 0:
-        print('an = {appnum}, fd = {appdate}, on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}, ipc = {ipc}, ver = {ipcver}'.format(**{k: pat.get(k, '') for k in schema}))
+        print('an = {appnum:10.10s}, fd = {appdate:10.10s}, ti = {title:30.30s}, on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}'.format(**{k: pat.get(k, '') for k in schema}))
 
     # limit
     if args.limit is not None and i >= args.limit:

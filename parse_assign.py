@@ -73,7 +73,7 @@ def parse_gen3(fname):
         pat['assignee_state'] = get_text(assignee, 'state')
 
         # patent info
-        patnums = list(gen_patnums(patents))
+        patnums = [prune_patnum(pn) for pn in gen3_assign(patents)]
         npat = len(patnums)
 
         # store assign
