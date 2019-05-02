@@ -100,12 +100,44 @@ class ChunkInserter:
         self.con.commit()
         self.items = []
 
+# pretend to insert in chunks
+class DummyInserter:
+    def __init__(self, *args, chunk_size=1000, output=False, **kwargs):
+        self.chunk_size = chunk_size
+        self.output = output
+        self.last = None
+        self.i = 0
+
+    def insert(self,*args):
+        self.last = args
+        self.i += 1
+        if self.i >= self.chunk_size:
+            self.commit()
+            return True
+        else:
+            return False
+
+    def insertmany(self,args):
+        if len(args) > 0:
+            self.last = args[-1]
+        self.i += len(args)
+        if self.i >= self.chunk_size:
+            self.commit()
+            return True
+        else:
+            return False
+
+    def commit(self):
+        if self.output:
+            print(self.last)
+        self.i = 0
+
 ##
 ## patnum parsers
 ##
 
 # standard way to pruce patent numbers (allows for all types)
-def prune_patnum(pn):
+def prune_patnum(pn, maxlen=7):
     ret = re.match(r'([a-zA-Z]{1,2}|0)?([0-9]+)', pn)
     if ret is None:
         prefix = ''
@@ -113,7 +145,7 @@ def prune_patnum(pn):
     else:
         prefix, patnum = ret.groups()
         prefix = '' if (prefix is None or prefix is '0') else prefix
-    patnum = patnum[:7].lstrip('0')
+    patnum = patnum[:maxlen].lstrip('0')
     return prefix + patnum
 
 ##
@@ -167,11 +199,11 @@ def gen2_cite(refs):
 
 # grant (3)
 def gen3_cite(refs, prefix):
-    for cite in refs.findall(prefix+'citation/patcit'):
+    for cite in refs.findall(prefix+'citation/patcit/document-id'):
         natl = get_text(cite, 'country')
         kind = get_text(cite, 'kind')
-        pnum = get_text(cite, 'document-id/doc-number')
-        if natl == 'US' and kind != '00': # US granted patents only
+        pnum = get_text(cite, 'doc-number')
+        if natl == 'us' and kind != '00': # US granted patents only
             yield pnum
 
 ##

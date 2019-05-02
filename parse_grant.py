@@ -164,7 +164,7 @@ def parse_grant_gen3(elem, fname):
 
     # published patent
     pubinfo = pubref.find('document-id')
-    pat['patnum'] = prune_patnum(get_text(pubinfo, 'doc-number'))
+    pat['patnum'] = prune_patnum(get_text(pubinfo, 'doc-number'), maxlen=8)
     pat['pubdate'] = get_text(pubinfo, 'date')
 
     # filing date
@@ -197,7 +197,7 @@ def parse_grant_gen3(elem, fname):
         refs = bib.find('us-references-cited')
         prefix = 'us-'
     if refs is not None:
-        pat['cites'] = [prune_patnum(pn) for pn in gen3_cite(refs, prefix)]
+        pat['cites'] = [prune_patnum(pn, maxlen=8) for pn in gen3_cite(refs, prefix)]
     else:
         pat['cites'] = []
 
@@ -248,15 +248,20 @@ schema = {
 tabsig = ', '.join([f'{k} {v}' for k, v in schema.items()])
 
 # database setup
-con = sqlite3.connect(args.db)
-cur = con.cursor()
-cur.execute(f'CREATE TABLE IF NOT EXISTS grant ({tabsig})')
-cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_patnum ON grant (patnum)')
-cur.execute('CREATE TABLE IF NOT EXISTS ipc_grant (patnum text, ipc text, rank int, ver text)')
-cur.execute('CREATE TABLE IF NOT EXISTS cite (src text, dst text)')
-pat_chunker = ChunkInserter(con, table='grant')
-ipc_chunker = ChunkInserter(con, table='ipc_grant')
-cit_chunker = ChunkInserter(con, table='cite')
+if args.db is not None:
+    con = sqlite3.connect(args.db)
+    cur = con.cursor()
+    cur.execute(f'CREATE TABLE IF NOT EXISTS grant ({tabsig})')
+    cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_patnum ON grant (patnum)')
+    cur.execute('CREATE TABLE IF NOT EXISTS ipc_grant (patnum text, ipc text, rank int, ver text)')
+    cur.execute('CREATE TABLE IF NOT EXISTS cite (src text, dst text)')
+    pat_chunker = ChunkInserter(con, table='grant')
+    ipc_chunker = ChunkInserter(con, table='ipc_grant')
+    cit_chunker = ChunkInserter(con, table='cite')
+else:
+    pat_chunker = DummyInserter()
+    ipc_chunker = DummyInserter()
+    cit_chunker = DummyInserter()
 
 # global adder
 i = 0
@@ -325,4 +330,6 @@ for fpath in file_list:
 pat_chunker.commit()
 ipc_chunker.commit()
 cit_chunker.commit()
-con.close()
+
+if args.db is not None:
+    con.close()
