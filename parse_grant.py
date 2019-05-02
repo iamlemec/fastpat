@@ -86,7 +86,7 @@ def parse_grant_gen1(fname):
         elif tag == 'STA':
             if sec == 'ASSG':
                 pat['state'] = buf
-                pat['country'] = 'US'
+                pat['country'] = 'us'
         elif tag == 'CNT':
             if sec == 'ASSG':
                 pat['country'] = buf[:2]
