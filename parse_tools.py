@@ -6,6 +6,10 @@ import os
 import re
 from lxml.etree import XMLPullParser
 
+##
+## xml parsing
+##
+
 # get descendent text
 def get_text(parent, tag, default=''):
     child = parent.find(tag)
@@ -50,6 +54,10 @@ def parse_wrapper(fpath, main_tag, parser):
         else:
             pp.feed('</root>\n')
             return parse_all()
+
+##
+## database interface
+##
 
 # insert in chunks
 class ChunkInserter:
@@ -211,9 +219,60 @@ def gen3_cite(refs, prefix):
 ##
 
 def gen3_assign(patents):
-    for pat in patents:
-        for doc in pat.findall('document-id'):
-            kind = get_text(doc, 'kind')
-            pnum = get_text(doc, 'doc-number')
-            if not kind.startswith('X'):
-                yield pnum
+    for doc in patents.findall('patent-property/document-id'):
+        kind = get_text(doc, 'kind')
+        pnum = get_text(doc, 'doc-number')
+        if kind.startswith('b'):
+            yield pnum
+
+# detect organization type
+ORG_CORP = 0
+ORG_NONP = 1
+ORG_INDV = 2
+
+LEN_CUT = 30
+
+corp_keys = ['corp', 'co', 'inc', 'llc', 'lp', 'plc', 'ltd', 'limited', 'company', 'corporation', 'incorporated', 'international', 'systems', 'sa', 'oy', 'consulting', 'bank', 'gmbh', 'kabushiki', 'kaisha', 'bv', 'nv', 'sl', 'aktiengesellschaft', 'maschinenfabrik', 'ab', 'ag', 'as', 'spa', 'hf', 'societe', 'associates', 'business', 'industries', 'group', 'kk', 'laboratories', 'works', 'studio', 'telecom', 'investments', 'consultants', 'electronics', 'technologies', 'microsystems', 'multimedia', 'networks', 'technology', 'partnership', 'electric', 'components', 'automotive', 'instruments', 'communication', 'enterprises', 'network', 'engineering', 'designs', 'sciences', 'partners', 'aktiengellschaft', 'venture', 'aerospace', 'pharmaceuticals', 'design', 'medical', 'products', 'pharma', 'energy', 'solutions', 'france', 'isreal', 'product', 'plastics', 'communications', 'kgaa', 'sas', 'cellular', 'gesellschaft', 'se', 'holdings', 'kg', 'srl', 'chimie']
+nonp_keys = ['institute', 'university', 'hospital', 'foundation', 'college', 'research', 'administration', 'recherche', 'department', 'trust', 'association', 'ministry', 'laboratory', 'board', 'office', 'univ', 'ecole', 'secretary', 'universidad', 'society', 'universiteit', 'centre', 'center', 'national', 'school', 'institut', 'institutes', 'universite']
+
+punc_re = re.compile(r'[0-9&()]')
+spac_re = re.compile(r'[ ,]')
+corp_re = re.compile('\\b('+'|'.join(corp_keys)+')\\b')
+nonp_re = re.compile('\\b('+'|'.join(nonp_keys)+')\\b')
+
+def org_type(name):
+    name = name.replace('.', '')
+    name = name.replace('/', '')
+    has_corp = corp_re.search(name) != None
+    has_nonp = nonp_re.search(name) != None
+    has_punc = punc_re.search(name) != None
+    has_spac = spac_re.search(name) != None
+    long_name = len(name) > LEN_CUT
+    if has_corp or has_punc or not has_spac or long_name:
+        return ORG_CORP
+    elif has_nonp:
+        return ORG_NONP
+    else:
+        return ORG_INDV
+
+# detect conveyance type
+CONV_ASSIGN = 0
+CONV_LICENSE = 1
+CONV_MERGER = 2
+CONV_OTHER = 3
+
+# detect if a conveyance is not a name/address change or security agreement
+other_keys = ['change', 'secur', 'correct', 'release', 'lien', 'update', 'nunc', 'collat']
+other_re = re.compile('|'.join(other_keys))
+
+def convey_type(convey):
+    if other_re.search(convey) != None:
+        return CONV_OTHER
+    elif convey.find('assign') != -1:
+        return CONV_ASSIGN
+    elif convey.find('license') != -1:
+        return CONV_LICENSE
+    elif convey.find('merge') != -1:
+        return CONV_MERGER
+    else:
+        return CONV_OTHER

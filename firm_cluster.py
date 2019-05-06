@@ -43,7 +43,7 @@ def autodb(f):
 #
 
 @autodb
-def generate_names(con,cur):
+def generate_names(con, cur):
     print('generating owner names')
 
     # standardize compustat names
@@ -90,6 +90,34 @@ def generate_names(con,cur):
                    join owner as assignor_owner on assign_std.assignorstd=assignor_owner.name""")
 
     con.commit()
+
+    print('generating names')
+
+    apply = pd.read_sql('select appnum,appname from apply', con).dropna()
+    grant = pd.read_sql('select patnum,owner from grant', con).dropna()
+    assignor = pd.read_sql('select assignid,assignor', con).dropna()
+    assignee = pd.read_sql('select assignid,assignee', con).dropna()
+    compustat = pd.read_sql('select compid,namestd', con).dropna()
+
+    apply = apply[apply['appname'].str.len()>0]
+    grant = grant[grant['appname'].str.len()>0]
+
+    apply['name'] = apply['appname'].apply(standardize_weak)
+    grant['name'] = grant['appname'].apply(standardize_weak)
+
+    names = pd.concat([apply['name'], grant['name']]).drop_duplicates().reset_index(drop=True)
+    names = names.rename('name').rename_axis('id').reset_index()
+    names.to_sql('name', con, index=False, if_exists='replace')
+
+    apply = pd.merge(apply, names, how='left', on='name')
+    grant = pd.merge(grant, names, how='left', on='name')
+
+    apply[['appnum', 'id']].to_sql('apply_match', con, index=False, if_exists='replace')
+    grant[['patnum', 'id']].to_sql('grant_match', con, index=False, if_exists='replace')
+
+    con.commit()
+    print(f'found {len(names)} names')
+
 
 # k = 8, thresh = 4 works well
 @autodb

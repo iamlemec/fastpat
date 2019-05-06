@@ -13,11 +13,12 @@ con = sqlite3.connect(args.db)
 cur = con.cursor()
 
 # read frame into memory
-datf = pd.read_csv(args.target, error_bad_lines=False, skiprows=1,
-                   names=['gvkey', 'datadate', 'year', 'name', 'assets', 'capx', 'cash',
-                          'cogs', 'shares', 'deprec', 'income', 'employ', 'intan', 'debt',
-                          'prefstock', 'revenue', 'sales', 'rnd', 'fcost', 'price', 'naics',
-                          'sic', 'acquire', 'acquire_income'])
+datf = pd.read_csv(args.target, error_bad_lines=False, skiprows=1, names=[
+    'gvkey', 'datadate', 'year', 'name', 'assets', 'capx', 'cash', 'cogs',
+    'shares', 'deprec', 'income', 'employ', 'intan', 'debt', 'prefstock',
+    'revenue', 'sales', 'rnd', 'fcost', 'price', 'naics', 'sic', 'acquire',
+    'acquire_income'
+])
 
 # clean up data
 datf['mktval'] = datf['shares']*datf['price']

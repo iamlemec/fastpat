@@ -146,13 +146,17 @@ schema = {
 tabsig = ', '.join([f'{k} {v}' for k, v in schema.items()])
 
 # database setup
-con = sqlite3.connect(args.db)
-cur = con.cursor()
-cur.execute(f'CREATE TABLE IF NOT EXISTS apply ({tabsig})')
-cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_appnum ON apply (appnum)')
-cur.execute('CREATE TABLE IF NOT EXISTS ipc_apply (appnum text, ipc text, rank int, ver text)')
-pat_chunker = ChunkInserter(con, table='apply')
-ipc_chunker = ChunkInserter(con, table='ipc_apply')
+if args.db is not None:
+    con = sqlite3.connect(args.db)
+    cur = con.cursor()
+    cur.execute(f'CREATE TABLE IF NOT EXISTS apply ({tabsig})')
+    cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_appnum ON apply (appnum)')
+    cur.execute('CREATE TABLE IF NOT EXISTS ipc_apply (appnum text, ipc text, rank int, ver text)')
+    pat_chunker = ChunkInserter(con, table='apply')
+    ipc_chunker = ChunkInserter(con, table='ipc_apply')
+else:
+    pat_chunker = DummyInserter()
+    ipc_chunker = DummyInserter()
 
 # chunking express
 i = 0
@@ -216,6 +220,6 @@ for fpath in file_list:
 # commit to db and close
 pat_chunker.commit()
 ipc_chunker.commit()
-con.close()
 
-print(f'Found {i} patents')
+if args.db is not None:
+    con.close()
