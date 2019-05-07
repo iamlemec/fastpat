@@ -12,7 +12,7 @@ args = parser.parse_args()
 # import to dataframe
 print('reading table')
 
-colspec = [(0, 7), (8, 16), (17, 18), (19, 27), (28, 36), (37, 45), (46, 51)]
+colspec = [(0, 13), (14, 22), (23, 24), (25, 33), (34, 42), (43, 51), (52, 56)]
 datf = pd.read_fwf(args.target, colspecs=colspec, usecols=[0, 2, 6], names=['patnum', 'is_small', 'event_code'])
 
 # normalize patent number
@@ -27,17 +27,18 @@ m12 = ['M1553', 'M172', 'M175', 'M185', 'M2553', 'M275', 'M285']
 mmap = [(m, 4) for m in m4] + [(m, 8) for m in m8] + [(m, 12) for m in m12]
 codes = pd.DataFrame(mmap, columns=['code', 'lag']).set_index('code')
 
-datf = datf.join(codes, on='event_code', how='left').drop('event_code', axis=1)
+datf = datf.join(codes, on='event_code', how='left').dropna()
+datf = datf.drop('event_code', axis=1)
 datf['is_small'] = datf['is_small'] == 'Y'
 pat_groups = datf.groupby('patnum')
-last_maint = pat_groups['lag'].max()
-ever_large = ~pat_groups['is_small'].min()
-dpat = pd.DataFrame({'last_maint': last_maint, 'ever_large': ever_large})
+dpat = pd.DataFrame({
+    'last_maint': pat_groups['lag'].max().astype(int),
+    'ever_large': ~pat_groups['is_small'].min().astype(bool)
+})
 
 # commit to sql
 print('writing table')
 
 with sqlite3.connect(args.db) as con:
     dpat.to_sql('maint', con, if_exists='replace')
-    con.execute('CREATE UNIQUE INDEX maint_idx ON maint(patnum)')
     con.commit()
