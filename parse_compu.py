@@ -21,8 +21,9 @@ datf = datf.drop(['datadate', 'shares', 'prefstock', 'price'], axis=1)
 datf = datf.dropna(subset=['gvkey', 'year', 'name'])
 datf['name'] = datf['name'].str.lower()
 datf['naics'] = datf['naics'].fillna(0).astype(int).map(lambda x: f'{x:<06d}')
+datf = datf.reset_index(drop=True).rename_axis('compid').reset_index()
 
 # write to sql
 with sqlite3.connect(args.db) as con:
-    datf.to_sql('compustat', con, if_exists='replace')
+    datf.to_sql('compustat', con, index=False, if_exists='replace')
     con.commit()
