@@ -150,7 +150,7 @@ if args.db is not None:
     con = sqlite3.connect(args.db)
     cur = con.cursor()
     cur.execute(f'CREATE TABLE IF NOT EXISTS apply ({tabsig})')
-    cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_appnum ON apply (appnum)')
+    cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS apply_appnum ON apply (appnum)')
     cur.execute('CREATE TABLE IF NOT EXISTS ipc_apply (appnum text, ipc text, rank int, ver text)')
     pat_chunker = ChunkInserter(con, table='apply')
     ipc_chunker = ChunkInserter(con, table='ipc_apply')
