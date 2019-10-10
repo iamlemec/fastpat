@@ -36,6 +36,6 @@ for name, path, url in sorted(url_list):
 
 # to extract:
 # cd data/grant
-# ls | xargs -n 1 unzip
+# ls *.zip | xargs -n 1 unzip -n
 # rm *.txt
 # rm *.html

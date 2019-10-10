@@ -31,4 +31,4 @@ for name, path, url in sorted(url_list):
 
 # extract files
 # cd data/assign
-# ls | xargs -n 1 unzip
+# ls *.zip | xargs -n 1 unzip -n

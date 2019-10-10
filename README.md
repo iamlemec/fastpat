@@ -11,11 +11,13 @@ You can also find some higher level analysis code, mostly using `pandas`, in the
 Below is the pipeline that you'll want to follow. There are many small design decisions I've made along the way, and you may want to tweak these to suit your own purposes.
 
 * Acquiring data
-    * `fetch_grants.py`: fetch patent grant files
+    * `fetch_apply.py`: fetch patent application files
+    * `fetch_grant.py`: fetch patent grant files
     * `fetch_assign.py`: fetch patent assignment files
     * batch unzip XML files: `ls *.zip | xargs -n 1 unzip`
 * Parsing raw data files
-    * `parse_grants.py`: parse patent grants (including citations), all data formats
+    * `parse_apply.py`: parse patent applications
+    * `parse_grant.py`: parse patent grants (including citations), all data formats
     * `parse_assign.py`: parse patent assignments
     * `parse_maint.py`: parse patent maintenance events
     * `parse_compustat.py`: parse compustat data
