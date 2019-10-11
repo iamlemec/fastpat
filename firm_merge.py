@@ -18,11 +18,6 @@ if args.stage <= 0:
     # merge year data
     print('Merging with patent data')
 
-    cur.execute('drop table if exists patent_trans')
-    cur.execute('create table patent_trans (patnum int, first_trans int, ntrans int)')
-    cur.execute('insert into patent_trans select patnum,min(execyear),count(*) from assign_info group by patnum')
-    cur.execute('create unique index patent_trans_idx on patent_trans(patnum)')
-
     cur.execute('drop table if exists patent_info')
     cur.execute('create table patent_info (patnum integer primary key, firm_num int, fileyear int, grantyear int, state text, country text, ipc text, ipcver text, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, last_maint int, life_grant int, life_file int, expryear int)')
     cur.execute("""insert into patent_info select patent_basic.patnum,firm_num,fileyear,grantyear,state,country,ipc,ipcver,patent_trans.first_trans,patent_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.last_maint,0,0,0 from patent_basic

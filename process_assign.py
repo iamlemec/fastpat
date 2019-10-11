@@ -256,10 +256,23 @@ country_map = {
 }
 
 # open database
-with sqlite3.connect(args.db) as con:
-    assn = pd.read_sql('select * from assign', con)
-    assn['assignee_state'] = assn['assignee_state'].map(state_map)
-    assn['assignee_country'] = assn['assignee_country'].map(country_map)
-    assn['same'] = assn[['assignor', 'assignee']].apply(lambda x: same_entity(*x), raw=True, axis=1)
-    good = assn[~assn['same']].drop('same', axis=1)
-    good.to_sql('assign_use', con, index=False, if_exists='replace')
+con = sqlite3.connect(args.db)
+
+# eliminate assignments within entities
+assn = pd.read_sql('select * from assign', con)
+assn['assignee_state'] = assn['assignee_state'].map(state_map)
+assn['assignee_country'] = assn['assignee_country'].map(country_map)
+assn['same'] = assn[['assignor', 'assignee']].apply(lambda x: same_entity(*x), raw=True, axis=1)
+good = assn[~assn['same']].drop('same', axis=1)
+good.to_sql('assign_use', con, index=False, if_exists='replace')
+
+# aggregated assignment stats
+pat_group = good.groupby('patnum')
+assign_stats = pd.DataFrame({
+    'first_trans': pat_group['execdate'].min(),
+    'ntrans': pat_group.size()
+}).reset_index()
+assign_stats.to_sql('assign_stats', con, if_exists='replace')
+
+con.commit()
+con.close()
