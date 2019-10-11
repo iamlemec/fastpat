@@ -170,7 +170,7 @@ if __name__ == "__main__":
 
     # go through steps
     with sqlite3.connect(args.db) as con:
-        unique_names(con)
+        generate_names(con)
         filter_pairs(con)
         find_groups(con)
         merge_firms(con)
