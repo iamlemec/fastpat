@@ -270,9 +270,9 @@ good.to_sql('assign_use', con, index=False, if_exists='replace')
 pat_group = good.groupby('patnum')
 assign_stats = pd.DataFrame({
     'first_trans': pat_group['execdate'].min(),
-    'ntrans': pat_group.size()
+    'n_trans': pat_group.size()
 }).reset_index()
-assign_stats.to_sql('assign_stats', con, if_exists='replace')
+assign_stats.to_sql('assign_stats', con, index=False, if_exists='replace')
 
 con.commit()
 con.close()

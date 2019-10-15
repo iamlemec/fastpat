@@ -1,197 +1,167 @@
-import argparse
-import itertools
 import sqlite3
 import numpy as np
 import pandas as pd
+from itertools import chain
 
-# parse input arguments
-parser = argparse.ArgumentParser(description='Merge firm patent data.')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
-parser.add_argument('--stage', type=int, default=0, help='min stage to run')
-args = parser.parse_args()
+def merge_grants(con):
+    print('Merging all grant data')
 
-# open dbs
-con = sqlite3.connect(args.db)
-cur = con.cursor()
+    grant = pd.read_sql('select * from grant', con, index_col='patnum')
+    firm = pd.read_sql('select * from grant_firm', con, index_col='patnum')
+    cite = pd.read_sql('select * from cite_stats', con, index_col='patnum')
+    assign = pd.read_sql('select * from assign_stats', con, index_col='patnum')
+    maint = pd.read_sql('select * from maint', con, index_col='patnum')
 
-if args.stage <= 0:
-    # merge year data
-    print('Merging with patent data')
+    grant = grant.join(firm)
+    grant = grant.join(cite)
+    grant = grant.join(assign)
+    grant = grant.join(maint)
 
-    cur.execute('drop table if exists patent_info')
-    cur.execute('create table patent_info (patnum integer primary key, firm_num int, fileyear int, grantyear int, state text, country text, ipc text, ipcver text, first_trans int, ntrans int, n_cited int, n_self_cited int, n_citing int, last_maint int, life_grant int, life_file int, expryear int)')
-    cur.execute("""insert into patent_info select patent_basic.patnum,firm_num,fileyear,grantyear,state,country,ipc,ipcver,patent_trans.first_trans,patent_trans.ntrans,cite_stats.n_cited,cite_stats.n_self_cited,cite_stats.n_citing,maint.last_maint,0,0,0 from patent_basic
-        left outer join patent_trans on (patent_basic.patnum = patent_trans.patnum)
-        left outer join maint on (patent_basic.patnum = maint.patnum)
-        left outer join cite_stats on (patent_basic.patnum = cite_stats.patnum)""")
+    fill_cols = ['n_cited', 'n_citing', 'n_self_cited', 'n_trans']
+    grant = grant.fillna({c: 0 for c in fill_cols})
+    grant[fill_cols] = grant[fill_cols].astype(np.int)
 
-    cur.execute('update patent_info set ntrans=0 where ntrans is null')
-    cur.execute('update patent_info set n_cited=0 where n_cited is null')
-    cur.execute('update patent_info set n_self_cited=0 where n_self_cited is null')
-    cur.execute('update patent_info set n_citing=0 where n_citing is null')
+    int_cols = ['firm_num', 'claims', 'last_maint', 'ever_large']
+    grant[int_cols] = grant[int_cols].astype('Int64')
 
-    cur.execute('update patent_info set life_grant=8 where last_maint=4')
-    cur.execute('update patent_info set life_grant=12 where last_maint=8')
-    cur.execute('update patent_info set life_grant=17 where last_maint=12 and grantyear<1974')
-    cur.execute('update patent_info set life_grant=20 where last_maint=12 and grantyear>=1974')
-    cur.execute('update patent_info set life_grant=4 where last_maint is null and grantyear<2011')
-    cur.execute('update patent_info set life_file=life_grant+grantyear-fileyear')
-    cur.execute('update patent_info set expryear=grantyear+life_grant')
-
+    grant.to_sql('grant_info', con, if_exists='replace')
     con.commit()
 
-if args.stage <= 1:
-    # aggregate by firm-year
-    print('Aggregating by firm-year')
+def generate_firmyear(con):
+    print('Generating all firm-years')
 
-    cur.execute('drop table if exists source_tot')
-    cur.execute('create table source_tot (firm_num int, year int, nbulk int, pnum int)')
-    cur.execute('insert into source_tot select source_fn,execyear,count(*),sum(ntrans) from assign_bulk group by source_fn,execyear')
+    # patent applications
+    apply = pd.read_sql('select appnum,appdate from apply', con)
+    apply_firm = pd.read_sql('select * from apply_firm', con, index_col='appnum')
+    apply = apply.join(apply_firm, on='appnum', how='inner')
+    apply['appyear'] = apply['appdate'].str.slice(0, 4).astype(np.int)
 
-    cur.execute('drop table if exists dest_tot')
-    cur.execute('create table dest_tot (firm_num int, year int, nbulk int, pnum int)')
-    cur.execute('insert into dest_tot select dest_fn,execyear,count(*),sum(ntrans) from assign_bulk group by dest_fn,execyear')
+    apply_fy = apply.groupby(['firm_num', 'appyear']).size().rename('n_apply')
+    apply_fy = apply_fy.rename_axis(index={'appyear': 'year'})
 
-    cur.execute('drop table if exists file_tot')
-    cur.execute('create table file_tot (firm_num int, year int, pnum int)')
-    cur.execute('insert into file_tot select firm_num,fileyear,count(*) from patent_info group by firm_num,fileyear')
+    # patent grants
+    grant = pd.read_sql('select patnum,pubdate,n_cited,n_citing,n_self_cited from grant_info', con)
+    grant_firm = pd.read_sql('select * from grant_firm', con, index_col='patnum')
+    grant = grant.join(grant_firm, on='patnum', how='inner')
+    grant['pubyear'] = grant['pubdate'].str.slice(0, 4).astype(np.int)
 
-    cur.execute('drop table if exists grant_tot')
-    cur.execute('create table grant_tot (firm_num int, year int, pnum int, n_cited int, n_self_cited int, n_citing int)')
-    cur.execute('insert into grant_tot select firm_num,grantyear,count(*),sum(n_cited),sum(n_self_cited),sum(n_citing) from patent_info group by firm_num,grantyear')
+    grant_groups = grant.groupby(['firm_num', 'pubyear'])
+    grant_fy = grant_groups[['n_cited', 'n_citing', 'n_self_cited']].sum()
+    grant_fy['n_grant'] = grant_groups.size()
+    grant_fy = grant_fy.rename_axis(index={'pubyear': 'year'})
 
-    cur.execute('drop table if exists expire_tot')
-    cur.execute('create table expire_tot (firm_num int, year int, pnum int)')
-    cur.execute('insert into expire_tot select firm_num,expryear,count(*) from patent_info group by firm_num,expryear')
+    # patent assignments
+    assign = pd.read_sql('select assignid,execdate from assign_use', con)
+    assignor_firm = pd.read_sql('select * from assignor_firm', con, index_col='assignid')
+    assignee_firm = pd.read_sql('select * from assignee_firm', con, index_col='assignid')
+    assign = assign.join(assignor_firm.add_prefix('assignor_'), on='assignid', how='inner')
+    assign = assign.join(assignee_firm.add_prefix('assignee_'), on='assignid', how='inner')
+    assign = assign[assign['execdate']!='']
+    assign['execyear'] = assign['execdate'].str.slice(0, 4).astype(np.int)
 
-    cur.execute('drop table if exists compustat_tot')
-    cur.execute('create table compustat_tot (firm_num int, year int, gvkey int, assets real, capx real, cash real, cogs real, deprec real, income real, employ real, intan real, debt real, revenue real, sales real, rnd real, fcost real, mktval real, acquire real, naics int, sic int)')
-    cur.execute('insert into compustat_tot select firm_num,year,gvkey,sum(assets),sum(capx),sum(cash),sum(cogs),sum(deprec),sum(income),sum(employ),sum(intan),sum(debt),sum(revenue),sum(sales),sum(rnd),sum(fcost),sum(mktval),sum(acquire),naics,sic from compustat_merge group by firm_num,year')
+    assignor_fy = assign.groupby(['assignor_firm_num', 'execyear']).size().rename('n_source')
+    assignor_fy = assignor_fy.rename_axis(index={'assignor_firm_num': 'firm_num', 'execyear': 'year'})
 
+    assignee_fy = assign.groupby(['assignee_firm_num', 'execyear']).size().rename('n_dest')
+    assignee_fy = assignee_fy.rename_axis(index={'assignee_firm_num': 'firm_num', 'execyear': 'year'})
+
+    # compustat firms
+    compu = pd.read_sql('select * from compustat', con)
+    compu_firm = pd.read_sql('select * from compustat_firm', con, index_col='compid')
+    compu = compu.join(compu_firm, on='compid', how='inner')
+
+    compu_fy = compu.groupby(['firm_num', 'year'])[['assets', 'capx', 'cash', 'cogs', 'deprec', 'income', 'employ', 'intan', 'debt', 'revenue', 'sales', 'rnd', 'fcost', 'mktval']].sum()
+    ind_info = compu.groupby(['firm_num', 'year'])[['naics', 'sic']].first()
+    compu_fy = compu_fy.join(ind_info)
+
+    # comprehensive
+    total = pd.concat([apply_fy, grant_fy, assignor_fy, assignee_fy, compu_fy], axis=1).reset_index()
+    int_cols = ['n_apply', 'n_grant', 'n_cited', 'n_citing', 'n_self_cited', 'n_source', 'n_dest']
+    total[int_cols] = total[int_cols].astype('Int64')
+
+    total.to_sql('firmyear_info', con, index=False, if_exists='replace')
     con.commit()
 
-if args.stage <= 2:
-    # merge patent data together
-    print('Merging fields together')
-
-    cur.execute('drop table if exists firmyear_all')
-    cur.execute('create table firmyear_all (firm_num int, year int)')
-    cur.execute("""insert into firmyear_all
-        select firm_num,year from source_tot
-    union select firm_num,year from dest_tot
-    union select firm_num,year from file_tot
-    union select firm_num,year from grant_tot
-    union select firm_num,year from compustat_merge
-    """)
-    cur.execute('delete from firmyear_all where year==""')
-
-    cur.execute('drop table if exists firmyear_info')
-    cur.execute('create table firmyear_info (firm_num int, year int, source_nbulk int, source_pnum int, dest_nbulk int, dest_pnum int, file_pnum int, grant_pnum int, expire_pnum int, n_cited int, n_self_cited int, n_citing int, assets real, capx real, cash real, cogs real, deprec real, income real, employ real, intan real, debt real, revenue real, sales real, rnd real, fcost real, mktval real, acquire real, naics int, sic int)')
-    cur.execute("""insert into firmyear_info select firmyear_all.firm_num,firmyear_all.year,source_tot.nbulk,source_tot.pnum,dest_tot.nbulk,dest_tot.pnum,file_tot.pnum,grant_tot.pnum,expire_tot.pnum,n_cited,n_self_cited,n_citing,assets,capx,cash,cogs,deprec,income,employ,intan,debt,revenue,sales,rnd,fcost,mktval,acquire,naics,sic from firmyear_all
-    left outer join source_tot       on (firmyear_all.firm_num = source_tot.firm_num      and firmyear_all.year = source_tot.year)
-    left outer join dest_tot         on (firmyear_all.firm_num = dest_tot.firm_num        and firmyear_all.year = dest_tot.year)
-    left outer join file_tot         on (firmyear_all.firm_num = file_tot.firm_num        and firmyear_all.year = file_tot.year)
-    left outer join grant_tot        on (firmyear_all.firm_num = grant_tot.firm_num       and firmyear_all.year = grant_tot.year)
-    left outer join expire_tot       on (firmyear_all.firm_num = expire_tot.firm_num      and firmyear_all.year = expire_tot.year)
-    left outer join compustat_tot    on (firmyear_all.firm_num = compustat_tot.firm_num   and firmyear_all.year = compustat_tot.year)""")
-    cur.execute('update firmyear_info set source_nbulk=0 where source_nbulk is null')
-    cur.execute('update firmyear_info set source_pnum=0 where source_pnum is null')
-    cur.execute('update firmyear_info set dest_nbulk=0 where dest_nbulk is null')
-    cur.execute('update firmyear_info set dest_pnum=0 where dest_pnum is null')
-    cur.execute('update firmyear_info set file_pnum=0 where file_pnum is null')
-    cur.execute('update firmyear_info set grant_pnum=0 where grant_pnum is null')
-    cur.execute('update firmyear_info set expire_pnum=0 where expire_pnum is null')
-    cur.execute('delete from firmyear_info where year is null')
-
-    con.commit()
-
-if args.stage <= 3:
-    # find set of good firm statistics
+def firm_statistics(con):
     print('Finding firm statistics')
 
-    cur.execute('drop table if exists firm_life')
-    cur.execute('create table firm_life (firm_num integer primary key, year_min int, year_max int, life_span int)')
-    cur.execute('insert into firm_life select firm_num,max(1950,min(year)),min(2016,max(year)),0 from firmyear_info where year>=1950 and (file_pnum>0 or source_pnum>0) group by firm_num order by firm_num')
-    cur.execute('update firm_life set life_span=year_max-year_min+1')
+    # firm history statistics
+    firmyear = pd.read_sql('select firm_num,year,n_grant,naics,sic from firmyear_info', con)
+    firm_groups = firmyear.groupby('firm_num')
+    firm_life = pd.DataFrame({
+        'year_min': firm_groups['year'].min(),
+        'year_max': firm_groups['year'].max(),
+        'tot_pats': firm_groups['n_grant'].sum(),
+        'naics': firm_groups['naics'].first(),
+        'sic': firm_groups['sic'].first()
+    })
+    firm_life['tot_pats'] = firm_life['tot_pats'].fillna(0).astype(np.int)
+    firm_life['life_span'] = firm_life['year_max'] - firm_life['year_min'] + 1
 
-    cur.execute('drop table if exists firm_tot_pats')
-    cur.execute('create table firm_tot_pats (firm_num int, tot_pats int)')
-    cur.execute('insert into firm_tot_pats select firm_num,count(*) from patent_basic group by firm_num')
+    # load in ipc info
+    grant = pd.read_sql('select firm_num,ipc from grant_info', con)
+    grant = grant.dropna(subset=['firm_num'])
+    grant['firm_num'] = grant['firm_num'].astype('Int64')
+    grant['ipc4'] = grant['ipc'].str.slice(0, 4)
 
-    cur.execute('drop table if exists firm_ipc_count')
-    cur.execute('create table firm_ipc_count (firm_num int, ipc text, count int)')
-    cur.execute('insert into firm_ipc_count select firm_num,ipc,count(*) from patent_info group by firm_num,ipc')
-    cur.execute('drop table if exists firm_ipc_mode')
-    cur.execute('create table firm_ipc_mode (firm_num int, mode_ipc text, mode_ipc_count int)')
-    cur.execute('insert into firm_ipc_mode select * from firm_ipc_count group by firm_num having count=max(count)') # this works but isn't technically valid
-    cur.execute('drop table firm_ipc_count')
+    # get modal ipc4 info
+    mode_ipc = grant.groupby('firm_num')['ipc4'].apply(pd.Series.mode).rename('ipc4_mode')
+    mode_ipc = mode_ipc.rename_axis(['firm_num', 'mode_ipc4_count'], axis=0).reset_index(level=1)
+    firm_life = firm_life.join(mode_ipc)
+    firm_life['mode_ipc4_frac'] = firm_life['mode_ipc4_count']/firm_life['tot_pats']
+    firm_life = firm_life.drop('mode_ipc4_count', axis=1)
 
-    cur.execute('drop table if exists firm_life_2')
-    cur.execute('create table firm_life_2 (firm_num integer primary key, year_min int, year_max int, life_span int, tot_pats int, mode_ipc text, mode_ipc_count int, mode_ipc_frac real)')
-    cur.execute("""insert into firm_life_2 select firm_life.firm_num,year_min,year_max,life_span,tot_pats,mode_ipc,mode_ipc_count,0 from firm_life
-        left outer join firm_tot_pats on firm_life.firm_num = firm_tot_pats.firm_num
-        left outer join firm_ipc_mode on firm_life.firm_num = firm_ipc_mode.firm_num
-        where tot_pats>0""")
-    cur.execute('update firm_life_2 set mode_ipc_frac=mode_ipc_count*1.0/tot_pats')
-    cur.execute('drop table if exists firm_life')
-    cur.execute('alter table firm_life_2 rename to firm_life')
-
-    cur.execute('drop table firm_tot_pats')
-    cur.execute('drop table firm_ipc_mode')
-
+    firm_life.to_sql('firm_life', con, if_exists='replace')
     con.commit()
 
-if args.stage <= 4:
-    # construct patent stocks
+def patent_stocks(con):
     print('Constructing patent stocks')
 
     # load firm data
     firmyear_info = pd.read_sql('select * from firmyear_info', con)
-    firm_info = pd.read_sql('select * from firm_life', con)
+    firm_info = pd.read_sql('select firm_num,year_min,year_max,life_span from firm_life', con)
 
-    # make (firm_num,year) index
+    # make (firm_num, year) index
     fnum_set = firm_info['firm_num']
     year_min = firm_info['year_min']
     year_max = firm_info['year_max']
     life_span = firm_info['life_span']
-    all_fnums = np.array(list(itertools.chain.from_iterable([[fnum]*life for fnum, life in zip(fnum_set, life_span)])), dtype=np.int)
-    all_years = np.array(list(itertools.chain.from_iterable([range(x,y+1) for x, y in zip(year_min, year_max)])), dtype=np.int)
+    all_fnums = np.array(list(chain(*[[fnum]*life for fnum, life in zip(fnum_set, life_span)])), dtype=np.int)
+    all_years = np.array(list(chain(*[range(x, y+1) for x, y in zip(year_min, year_max)])), dtype=np.int)
     fy_all = pd.DataFrame({
         'firm_num': all_fnums,
         'year': all_years
     })
+
     datf_idx = fy_all.merge(firmyear_info, how='left', on=['firm_num', 'year'])
-    datf_idx = datf_idx.fillna(value={
-        'file_pnum': 0,
-        'grant_pnum': 0,
-        'expire_pnum': 0,
-        'dest_pnum': 0,
-        'source_pnum': 0,
-        'dest_nbulk': 0,
-        'source_nbulk': 0
-    })
+    int_cols = ['n_apply', 'n_grant', 'n_citing', 'n_cited', 'n_self_cited', 'n_source', 'n_dest']
+    datf_idx = datf_idx.fillna({c: 0 for c in int_cols})
+    datf_idx[int_cols] = datf_idx[int_cols].astype(np.int)
 
     # merge in overall firm info
-    datf_idx = datf_idx.merge(firm_info,how='left',on='firm_num')
+    datf_idx = datf_idx.merge(firm_info[['firm_num', 'year_min']], how='left', on='firm_num')
     datf_idx['age'] = datf_idx['year'] - datf_idx['year_min']
+    datf_idx = datf_idx.drop('year_min', axis=1)
 
     # aggregate stocks
-    datf_idx['patnet'] = datf_idx['file_pnum'] - datf_idx['expire_pnum']
     firm_groups = datf_idx.groupby('firm_num')
-    datf_idx['stock'] = firm_groups['patnet'].cumsum() - datf_idx['patnet']
-    datf_idx = datf_idx[datf_idx['stock']>0]
+    datf_idx['stock'] = firm_groups['n_apply'].cumsum()
 
     # write new frame to disk
-    int_fields = [
-        'firm_num', 'year', 'file_pnum', 'grant_pnum', 'expire_pnum',
-        'dest_pnum', 'source_pnum', 'dest_nbulk', 'source_nbulk', 'n_cited',
-        'n_self_cited', 'n_citing', 'naics', 'sic', 'year_min', 'year_max',
-        'life_span', 'tot_pats', 'mode_class', 'age', 'patnet', 'stock'
-    ]
-    dtype = {f: 'int' for f in int_fields}
-    datf_idx.to_sql('firmyear_index', con, if_exists='replace', dtype=dtype)
-
+    datf_idx.to_sql('firmyear_index', con, index=False, if_exists='replace')
     con.commit()
 
-# clean up
-con.close()
+if __name__ == "__main__":
+    import argparse
+
+    # parse input arguments
+    parser = argparse.ArgumentParser(description='Merge firm patent data.')
+    parser.add_argument('--db', type=str, default=None, help='database file to store to')
+    args = parser.parse_args()
+
+    # go through steps
+    with sqlite3.connect(args.db) as con:
+        merge_grants(con)
+        merge_firmyear(con)
+        firm_statistics(con)
+        patent_stocks(con)

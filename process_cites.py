@@ -39,7 +39,8 @@ def aggregate_cites(cites):
 
 # loop ofer citation chunks (otherwise requires >32GB of RAM)
 request = pd.read_sql('select * from cite', con, chunksize=args.chunk)
-cite_stats = pd.concat([aggregate_cites(df) for df in request])
+cite_stats = pd.concat([aggregate_cites(df) for df in request], axis=0)
+cite_stats = cite_stats.groupby('patnum').sum() # since patents can span multiple chunks
 cite_stats.to_sql('cite_stats', con, if_exists='replace')
 
 # close out
