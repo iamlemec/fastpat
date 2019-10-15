@@ -6,7 +6,7 @@ I also maintain a simplified repository with only the parsing code, which is kep
 
 You can also find some higher level analysis code, mostly using `pandas`, in the [patents_analyze](https://github.com/iamlemec/patents_analyze) repository.
 
-## File descriptions
+## Usage
 
 Below is the pipeline that you'll want to follow. There are many small design decisions I've made along the way, and you may want to tweak these to suit your own purposes.
 
@@ -20,27 +20,21 @@ Below is the pipeline that you'll want to follow. There are many small design de
     * `parse_grant.py`: parse patent grants (including citations), all data formats
     * `parse_assign.py`: parse patent assignments
     * `parse_maint.py`: parse patent maintenance events
-    * `parse_compustat.py`: parse compustat data
-* Cleaning patent data
+    * `parse_compu.py`: parse compustat data
+* Name matching and aggregation
     * `process_assign.py`: flag assignments between the same entity
-* Name matching and firm aggregation
     * `firm_cluster.py`: match firms by name from all data sources
     * `process_cites.py`: resolve citations at firm level and find self-cites
     * `firm_merge.py`: merge all of above into firmyear panel
 
-## Database layout
-
-The parsed data is stored and manipulated with `sqlite3` in a single file. I usually put these in `store`. All of the parse commands take a `--db` argument where you can specify the exact file name. The internal layout is:
-
-* `patent`: (patnum int, filedate text, grantdate text, class text, ipc text, ipcver text, city text, state text, country text, owner text, claims int, title text, abstract text, gen int)
-* `assign`: (assignid integer primary key, patnum int, execdate text, recdate text, conveyance text, assignor text, assignee text, assignee_state text, assignee_country text)
-* `maint`: (patnum int, ever_large int, last_maint int)
+The parsed data is stored and manipulated with `sqlite3` in a single file. I usually put these in `store`. All of the parse and aggregate commands take a `--db` argument where you can specify the exact file name.
 
 ## Data sources
 
 The fetch commands use the following layout:
 
-* `data/grant_files`: patent grant data from Google/USPTO
-* `data/assign_files`: patent reassignment data from Google/USPTO
-* `data/maint_files`: patent maintentance data from Google/USPTO
-* `data/compustat_files`: Compustat data since 1950 from WRDS
+* `data/grant`: patent grant data from USPTO
+* `data/apply`: patent application data from USPTO
+* `data/assign`: patent reassignment data from USPTO
+* `data/maint`: patent maintentance data from USPTO
+* `data/compustat`: Compustat data since 1950 from WRDS
