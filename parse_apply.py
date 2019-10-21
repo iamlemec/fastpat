@@ -3,13 +3,8 @@
 
 import re
 import os
-import sys
 import glob
-import argparse
-import sqlite3
-from lxml.etree import XMLPullParser
 from collections import defaultdict
-from itertools import chain
 from traceback import print_exc
 from parse_tools import *
 
@@ -64,7 +59,7 @@ def parse_apply_gen2(elem, fname):
         pat['abstract'] = raw_text(abst, sep=' ')
 
     # roll it in
-    return store_patent(pat)
+    return pat
 
 def parse_apply_gen3(elem, fname):
     pat = defaultdict(str)
@@ -116,86 +111,59 @@ def parse_apply_gen3(elem, fname):
         pat['abstract'] = raw_text(abspar, sep=' ')
 
     # roll it in
-    return store_patent(pat)
-
-# parse input arguments
-parser = argparse.ArgumentParser(description='patent application parser')
-parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
-parser.add_argument('--output', type=int, default=None, help='how often to output summary')
-parser.add_argument('--limit', type=int, default=None, help='only parse n patents')
-args = parser.parse_args()
+    return pat
 
 # table schema
-schema = {
-    'appnum': 'text', # Patent number
-    'appdate': 'text', # Application date
-    'appname': 'text', # Assignee name
-    'pubnum': 'text', # Publication number
-    'pubdate': 'text', # Publication date
-    'ipc': 'text', # Main IPC code
-    'ipcver': 'text', # IPC version info
-    'city': 'text', # Assignee city
-    'state': 'text', # State code
-    'country': 'text', # Assignee country
-    'title': 'text', # Title
-    'abstract': 'text', # Abstract
+schema_apply = {
+    'appnum': 'str', # Patent number
+    'appdate': 'str', # Application date
+    'appname': 'str', # Assignee name
+    'pubnum': 'str', # Publication number
+    'pubdate': 'str', # Publication date
+    'ipc': 'str', # Main IPC code
+    'ipcver': 'str', # IPC version info
+    'city': 'str', # Assignee city
+    'state': 'str', # State code
+    'country': 'str', # Assignee country
+    'title': 'str', # Title
+    'abstract': 'str', # Abstract
     'gen': 'int', # USPTO data format
-    'file': 'text', # path to source file
+    'file': 'str', # path to source file
 }
-tabsig = ', '.join([f'{k} {v}' for k, v in schema.items()])
 
-# database setup
-if args.db is not None:
-    con = sqlite3.connect(args.db)
-    cur = con.cursor()
-    cur.execute(f'CREATE TABLE IF NOT EXISTS apply ({tabsig})')
-    cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS apply_appnum ON apply (appnum)')
-    cur.execute('CREATE TABLE IF NOT EXISTS ipc_apply (appnum text, ipc text, rank int, ver text)')
-    pat_chunker = ChunkInserter(con, table='apply')
-    ipc_chunker = ChunkInserter(con, table='ipc_apply')
-else:
-    pat_chunker = DummyInserter()
-    ipc_chunker = DummyInserter()
+schema_ipc = {
+    'patnum': 'str', # Patent number
+    'ipc': 'str', # IPC code
+    'rank': 'int', # Order listed
+    'version': 'str' # IPC version
+}
 
 # chunking express
-i = 0
-def store_patent(pat):
-    global i
-    i += 1
-
+def store_patent(pat, chunker_pat, chunker_ipc):
     an, iv = pat['appnum'], pat['ipcver']
 
     # store ipcs
     for j, ipc in enumerate(pat['ipcs']):
         if j == 0: pat['ipc'] = ipc
-        ipc_chunker.insert(an, ipc, j, iv)
+        chunker_ipc.insert(an, ipc, j, iv)
 
     # store patent
-    pat_chunker.insert(*(pat[k] for k in schema))
+    chunker_pat.insert(*(pat.get(k, '') for k in schema_apply))
 
-    # output
-    if args.output is not None and i % args.output == 0:
-        print('an = {appnum:10.10s}, fd = {appdate:10.10s}, ti = {title:30.30s}, on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}'.format(**{k: pat.get(k, '') for k in schema}))
-
-    # limit
-    if args.limit is not None and i >= args.limit:
-        print("Reached limit.")
-        return False
-    else:
-        return True
-
-# collect files
-if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-    targ_dir = 'data/apply' if len(args.target) == 0 else args.target[0]
-    file_list = sorted(glob.glob(f'{targ_dir}/pab*.xml')) + sorted(glob.glob(f'{targ_dir}/ipab*.xml'))
-else:
-    file_list = args.target
-
-# parse by generation
-for fpath in file_list:
-    # detect generation
+# file level
+def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
     fdir, fname = os.path.split(fpath)
+    ftag, fext = os.path.splitext(fname)
+
+    opath = os.path.join(output, ftag)
+    opath_apply = f'{opath}_apply.csv'
+    opath_ipc = f'{opath}_ipc.csv'
+
+    if not overwrite:
+        if os.path.exists(opath_apply) and os.path.exists(opath_ipc):
+            print(f'{ftag}: Skipping')
+            return
+
     if fname.startswith('pab'):
         gen = 2
         main_tag = 'patent-application-publication'
@@ -204,22 +172,72 @@ for fpath in file_list:
         gen = 3
         parser = lambda fp: parse_wrapper(fp, 'us-patent-application', parse_apply_gen3)
     else:
-        raise Exception('Unknown format')
+        raise Exception(f'{ftag}: Unknown format')
+
+    if not dryrun:
+        chunker_apply = ChunkWriter(opath_apply, schema=schema_apply)
+        chunker_ipc = ChunkWriter(opath_ipc, schema=schema_ipc)
+    else:
+        chunker_apply = DummyWriter()
+        chunker_ipc = DummyWriter()
 
     # parse it up
-    print(f'Parsing {fname}, gen {gen}')
-    i0 = i
     try:
-        parser(fpath)
+        print(f'{ftag}: Starting')
+
+        i = 0
+        for pat in parser(fpath):
+            i += 1
+
+            store_patent(pat, chunker_apply, chunker_ipc)
+
+            # output
+            if display > 0 and i % display == 0:
+                spat = {k: pat.get(k, '') for k in schema_apply}
+                print('an = {appnum:10.10s}, fd = {appdate:10.10s}, ti = {title:30.30s}, on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}'.format(**spat))
+
+        # commit to db and close
+        chunker_apply.commit()
+        chunker_ipc.commit()
+
+        print(f'{ftag}: Parsed {i} patents')
     except Exception as e:
-        print('EXCEPTION OCCURRED!')
+        print(f'{ftag}: EXCEPTION OCCURRED!')
         print_exc()
-    print(f'Found {i-i0} patents, {i} total')
-    print()
 
-# commit to db and close
-pat_chunker.commit()
-ipc_chunker.commit()
+        chunker_apply.delete()
+        chunker_ipc.delete()
 
-if args.db is not None:
-    con.close()
+if __name__ == '__main__':
+    import argparse
+    from multiprocessing import Pool
+
+    # parse input arguments
+    parser = argparse.ArgumentParser(description='patent application parser')
+    parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
+    parser.add_argument('--output', type=str, default='parsed/apply', help='directory to output to')
+    parser.add_argument('--display', type=int, default=1000, help='how often to display summary')
+    parser.add_argument('--dryrun', action='store_true', help='do not actually store')
+    parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
+    parser.add_argument('--cores', type=int, default=10, help='number of cores to use')
+    args = parser.parse_args()
+
+    # collect files
+    if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
+        targ_dir = 'data/apply' if len(args.target) == 0 else args.target[0]
+        file_list = sorted(glob.glob(f'{targ_dir}/pab*.xml')) + sorted(glob.glob(f'{targ_dir}/ipab*.xml'))
+    else:
+        file_list = args.target
+
+    # ensure output dir
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+
+    # apply options
+    opts = dict(overwrite=args.overwrite, dryrun=args.dryrun, display=args.display)
+    def parse_file_opts(fpath):
+        parse_file(fpath, args.output, **opts)
+
+    # parse files
+    with Pool(args.cores) as pool:
+        pool.map(parse_file_opts, file_list, chunksize=1)

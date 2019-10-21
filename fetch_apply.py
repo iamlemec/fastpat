@@ -3,20 +3,25 @@
 import os
 import sys
 import time
+import argparse
 
-apply_dir = 'data/apply'
-apply_fpath = 'meta/apply_files.txt'
+parser = argparse.ArgumentParser(description='fetch patent applications from USPTO bulk data')
+parser.add_argument('--files', type=str, default='meta/apply_files.txt', help='list of application files to fetch')
+parser.add_argument('--output', type=str, default='data/apply', help='directory to store fetched files')
+parser.add_argument('--delay', type=int, default=10, help='number of seconds to wait between files')
+parser.add_argument('--overwrite', action='store_true', help='overwrite existing files')
+args = parser.parse_args()
+
 apply_url_fmt = 'https://bulkdata.uspto.gov/data/patent/application/redbook/bibliographic/{}/{}'
-overwrite = False
 
-if not os.path.exists(apply_dir):
-    os.makedirs(apply_dir)
+if not os.path.exists(args.output):
+    os.makedirs(args.output)
 
 url_list = []
-for line in open(apply_fpath):
+for line in open(args.files):
     line = line.strip()
-    path = os.path.join(apply_dir, line)
-    if not overwrite and os.path.isfile(path):
+    path = os.path.join(args.output, line)
+    if not args.overwrite and os.path.isfile(path):
         continue
 
     if line.startswith('ipab'):
@@ -34,7 +39,7 @@ for name, path, url in sorted(url_list):
     print(f'Fetching {name}')
     os.system(f'curl -o {path} {url}')
     print()
-    time.sleep(10)
+    time.sleep(args.delay)
 
 # to extract:
 # cd data/apply

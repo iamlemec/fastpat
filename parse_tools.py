@@ -4,6 +4,8 @@
 
 import os
 import re
+import numpy as np
+import pandas as pd
 from lxml.etree import XMLPullParser
 
 ##
@@ -36,45 +38,51 @@ def parse_wrapper(fpath, main_tag, parser):
     pp = XMLPullParser(tag=main_tag, events=['end'], recover=True)
     def parse_all():
         for _, pat in pp.read_events():
-            if not parser(pat, fname):
-                return False
+            yield parser(pat, fname)
             clear(pat)
-        return True
 
     with open(fpath, errors='ignore') as f:
         pp.feed('<root>\n')
         for line in f:
             if line.startswith('<?xml'):
-                if not parse_all():
-                    return False
+                yield from parse_all()
             elif line.startswith('<!DOCTYPE') or line.startswith('<!ENTITY') or line.startswith(']>'):
                 pass
             else:
                 pp.feed(line)
         else:
             pp.feed('</root>\n')
-            return parse_all()
+            yield from parse_all()
 
 ##
-## database interface
+## csv interface
 ##
+
+def astype(data, dtype):
+    if dtype == 'str':
+        return pd.Series(data, dtype='str')
+    elif dtype == 'int':
+        return pd.to_numeric(pd.Series(data), errors='coerce').astype('Int64')
+    else:
+        raise Exception(f'Unsupported type: {dtype}')
 
 # insert in chunks
-class ChunkInserter:
-    def __init__(self, con, table=None, cmd=None, cur=None, chunk_size=1000, nargs=None, output=False):
-        if table is None and cmd is None:
-            raise('Must specify either table or cmd')
-
-        self.con = con
-        self.cur = cur if cur is not None else con.cursor()
-        self.table = table
-        self.cmd = cmd
+class ChunkWriter:
+    def __init__(self, path, schema, chunk_size=1000, output=False):
+        self.path = path
+        self.schema = schema
         self.chunk_size = chunk_size
-        self.nargs = nargs
         self.output = output
         self.items = []
         self.i = 0
         self.j = 0
+
+        self.file = open(self.path, 'w+')
+        header = ','.join(schema)
+        self.file.write(f'{header}\n')
+
+    def __del__(self):
+        self.file.close()
 
     def insert(self, *args):
         self.items.append(args)
@@ -95,28 +103,32 @@ class ChunkInserter:
     def commit(self):
         self.i += 1
         self.j += len(self.items)
+
         if len(self.items) == 0:
             return
-        if self.cmd is None:
-            if self.nargs is None:
-                self.nargs = len(self.items[0])
-            sign = ','.join(self.nargs*'?')
-            self.cmd = f'insert or replace into {self.table} values ({sign})'
+
         if self.output:
             print(f'Committing chunk {self.i} to {self.table} ({len(self.items)})')
-        self.cur.executemany(self.cmd, self.items)
-        self.con.commit()
-        self.items = []
+
+        data = [x for x in zip(*self.items)]
+        frame = pd.DataFrame({k: astype(d, v) for (k, v), d in zip(self.schema.items(), data)})
+        frame.to_csv(self.file, index=False, header=False)
+
+        self.items.clear()
+
+    def delete(self):
+        self.file.close()
+        os.remove(self.path)
 
 # pretend to insert in chunks
-class DummyInserter:
+class DummyWriter:
     def __init__(self, *args, chunk_size=1000, output=False, **kwargs):
         self.chunk_size = chunk_size
         self.output = output
         self.last = None
         self.i = 0
 
-    def insert(self,*args):
+    def insert(self, *args):
         self.last = args
         self.i += 1
         if self.i >= self.chunk_size:
@@ -125,7 +137,7 @@ class DummyInserter:
         else:
             return False
 
-    def insertmany(self,args):
+    def insertmany(self, args):
         if len(args) > 0:
             self.last = args[-1]
         self.i += len(args)
@@ -140,6 +152,9 @@ class DummyInserter:
             print(self.last)
         self.i = 0
 
+    def delete(self):
+        pass
+
 ##
 ## patnum parsers
 ##
@@ -152,7 +167,7 @@ def prune_patnum(pn, maxlen=7):
         patnum = pn
     else:
         prefix, patnum = ret.groups()
-        prefix = '' if (prefix is None or prefix is '0') else prefix
+        prefix = '' if (prefix is None or prefix == '0') else prefix
     patnum = patnum[:maxlen].lstrip('0')
     return prefix + patnum
 

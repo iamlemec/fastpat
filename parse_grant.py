@@ -3,13 +3,10 @@
 
 import re
 import os
-import sys
 import glob
-import argparse
-import sqlite3
 from collections import defaultdict
-from itertools import chain
 from traceback import print_exc
+from itertools import chain
 from parse_tools import *
 
 # parse it up
@@ -33,12 +30,11 @@ def parse_grant_gen1(fname):
         if tag == 'PATN':
             if pat is not None:
                 pat['appnum'] = src + apn
-                if not store_patent(pat):
-                    break
+                yield pat
             pat = defaultdict(str)
             sec = 'PATN'
             pat['gen'] = 1
-            _, pat['file'] = os.path.split(fpath)
+            _, pat['file'] = os.path.split(fname)
             pat['ipcs'] = []
             pat['cites'] = []
             src, apn = '', ''
@@ -150,7 +146,7 @@ def parse_grant_gen2(elem, fname):
         pat['abstract'] = '\n'.join([raw_text(e) for e in abspars])
 
     # roll it in
-    return store_patent(pat)
+    return pat
 
 def parse_grant_gen3(elem, fname):
     pat = defaultdict(str)
@@ -217,94 +213,80 @@ def parse_grant_gen3(elem, fname):
         pat['abstract'] = raw_text(abspar, sep=' ')
 
     # roll it in
-    return store_patent(pat)
+    return pat
 
-# parse input arguments
-parser = argparse.ArgumentParser(description='patent grant parser.')
-parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
-parser.add_argument('--output', type=int, default=None, help='how often to output summary')
-parser.add_argument('--limit', type=int, default=None, help='only parse n patents')
-args = parser.parse_args()
-
-# table schema
-schema = {
-    'patnum': 'text', # Patent number
-    'pubdate': 'text', # Publication date
-    'appnum': 'text', # Application number
-    'appdate': 'text', # Publication date
-    'ipc': 'text', # Main IPC code
-    'ipcver': 'text', # IPC version info
-    'city': 'text', # Assignee city
-    'state': 'text', # State code
-    'country': 'text', # Assignee country
-    'owner': 'text', # Assignee name
+# table schemas
+schema_grant = {
+    'patnum': 'str', # Patent number
+    'pubdate': 'str', # Publication date
+    'appnum': 'str', # Application number
+    'appdate': 'str', # Publication date
+    'ipc': 'str', # Main IPC code
+    'ipcver': 'str', # IPC version info
+    'city': 'str', # Assignee city
+    'state': 'str', # State code
+    'country': 'str', # Assignee country
+    'owner': 'str', # Assignee name
     'claims': 'int', # Independent claim
-    'title': 'text', # Title
-    'abstract': 'text', # Abstract
+    'title': 'str', # Title
+    'abstract': 'str', # Abstract
     'gen': 'int', # USPTO data format
-    'file': 'text', # path to source file
+    'file': 'str', # path to source file
 }
-tabsig = ', '.join([f'{k} {v}' for k, v in schema.items()])
 
-# database setup
-if args.db is not None:
-    con = sqlite3.connect(args.db)
-    cur = con.cursor()
-    cur.execute(f'CREATE TABLE IF NOT EXISTS grant ({tabsig})')
-    cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS grant_patnum ON grant (patnum)')
-    cur.execute('CREATE UNIQUE INDEX IF NOT EXISTS grant_appnum ON grant (appnum)')
-    cur.execute('CREATE TABLE IF NOT EXISTS ipc_grant (patnum text, ipc text, rank int, ver text)')
-    cur.execute('CREATE TABLE IF NOT EXISTS cite (src text, dst text)')
-    pat_chunker = ChunkInserter(con, table='grant')
-    ipc_chunker = ChunkInserter(con, table='ipc_grant')
-    cit_chunker = ChunkInserter(con, table='cite')
-else:
-    pat_chunker = DummyInserter()
-    ipc_chunker = DummyInserter()
-    cit_chunker = DummyInserter()
+schema_ipc = {
+    'patnum': 'str', # Patent number
+    'ipc': 'str', # IPC code
+    'rank': 'int', # Order listed
+    'version': 'str' # IPC version
+}
 
-# global adder
-i = 0
-def store_patent(pat):
-    global i
-    i += 1
+schema_cite = {
+    'src': 'str', # Source patent (citer)
+    'dst': 'str' # Destination patent (citee)
+}
 
+# patent adder
+def store_patent(pat, chunker_grant, chunker_ipc, chunker_cite):
     pn, iv = pat['patnum'], pat['ipcver']
 
     # store cites
     for cite in pat['cites']:
-        cit_chunker.insert(pn, cite)
+        chunker_cite.insert(pn, cite)
 
     # store ipcs
     for j, ipc in enumerate(pat['ipcs']):
-        if j == 0: pat['ipc'] = ipc
-        ipc_chunker.insert(pn, ipc, j, iv)
+        if j == 0:
+            pat['ipc'] = ipc
+        chunker_ipc.insert(pn, ipc, j, iv)
 
     # store patent
-    pat_chunker.insert(*(pat.get(k, None) for k in schema))
+    chunker_grant.insert(*(pat.get(k, '') for k in schema_grant))
 
-    # output
-    if args.output is not None and i % args.output == 0:
-        print('pn = {patnum:10.10s}, pd = {pubdate:10.10s}, ti = {title:30.30s}, on = {owner:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}'.format(**{k: pat.get(k, '') for k in schema}))
-
-    # limit
-    if args.limit is not None and i >= args.limit:
-        print("Reached limit.")
-        return False
-    else:
-        return True
-
-# collect files
-if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-    targ_dir = 'data/grant' if len(args.target) == 0 else args.target[0]
-    file_list = sorted(glob.glob(f'{targ_dir}/*.dat')) + sorted(glob.glob(f'{targ_dir}/pgb*.xml')) + sorted(glob.glob(f'{targ_dir}/ipgb*.xml'))
-else:
-    file_list = args.target
-
-# parse by generation
-for fpath in file_list:
+# file level
+def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
     fdir, fname = os.path.split(fpath)
+    ftag, fext = os.path.splitext(fname)
+
+    opath = os.path.join(output, ftag)
+    opath_grant = f'{opath}_grant.csv'
+    opath_ipc = f'{opath}_ipc.csv'
+    opath_cite = f'{opath}_cite.csv'
+
+    if not overwrite:
+        if os.path.exists(opath_grant) and os.path.exists(opath_ipc) and os.path.exists(opath_cite):
+            print(f'{ftag}: Skipping')
+            return
+
+    if not dryrun:
+        chunker_grant = ChunkWriter(opath_grant, schema=schema_grant)
+        chunker_ipc = ChunkWriter(opath_ipc, schema=schema_ipc)
+        chunker_cite = ChunkWriter(opath_cite, schema=schema_cite)
+    else:
+        chunker_grant = DummyWriter()
+        chunker_ipc = DummyWriter()
+        chunker_cite = DummyWriter()
+
     if fname.endswith('.dat'):
         gen = 1
         parser = parse_grant_gen1
@@ -315,22 +297,68 @@ for fpath in file_list:
         gen = 3
         parser = lambda fp: parse_wrapper(fp, 'us-patent-grant', parse_grant_gen3)
     else:
-        print(f'Unknown format: {fname}')
+        print(f'{ftag}: Unknown format')
 
-    print(f'Parsing {fname}, gen = {gen}')
-    i0 = i
+    # parse it up
     try:
-        parser(fpath)
+        print(f'{ftag}: Starting')
+
+        i = 0
+        for pat in parser(fpath):
+            i += 1
+
+            # store all info
+            store_patent(pat, chunker_grant, chunker_ipc, chunker_cite)
+
+            # output if needed
+            if display > 0 and i % display == 0:
+                spat = {k: pat.get(k, '') for k in schema_grant}
+                print('pn = {patnum:10.10s}, pd = {pubdate:10.10s}, ti = {title:30.30s}, on = {owner:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}'.format(**spat))
+
+        # commit remaining
+        chunker_grant.commit()
+        chunker_ipc.commit()
+        chunker_cite.commit()
+
+        print(f'{ftag}: Parsed {i} patents')
     except Exception as e:
-        print('EXCEPTION OCCURRED!')
+        print(f'{ftag}: EXCEPTION OCCURRED!')
         print_exc()
-    print(f'Found {i-i0} patents, {i} total')
-    print()
 
-# commit to db and close
-pat_chunker.commit()
-ipc_chunker.commit()
-cit_chunker.commit()
+        chunker_grant.delete()
+        chunker_ipc.delete()
+        chunker_cite.delete()
 
-if args.db is not None:
-    con.close()
+if __name__ == '__main__':
+    import argparse
+    from multiprocessing import Pool
+
+    # parse input arguments
+    parser = argparse.ArgumentParser(description='patent grant parser.')
+    parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
+    parser.add_argument('--output', type=str, default='parsed/grant', help='directory to output to')
+    parser.add_argument('--display', type=int, default=1000, help='how often to display summary')
+    parser.add_argument('--dryrun', action='store_true', help='do not actually store')
+    parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
+    parser.add_argument('--cores', type=int, default=10, help='number of cores to use')
+    args = parser.parse_args()
+
+    # collect files
+    if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
+        targ_dir = 'data/grant' if len(args.target) == 0 else args.target[0]
+        file_list = sorted(glob.glob(f'{targ_dir}/*.dat')) + sorted(glob.glob(f'{targ_dir}/pgb*.xml')) + sorted(glob.glob(f'{targ_dir}/ipgb*.xml'))
+    else:
+        file_list = args.target
+
+    # ensure output dir
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+
+    # apply options
+    opts = dict(overwrite=args.overwrite, dryrun=args.dryrun, display=args.display)
+    def parse_file_opts(fpath):
+        parse_file(fpath, args.output, **opts)
+
+    # parse files
+    with Pool(args.cores) as pool:
+        pool.map(parse_file_opts, file_list, chunksize=1)

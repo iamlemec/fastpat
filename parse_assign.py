@@ -1,13 +1,13 @@
+#!/usr/bin/env python3
+# coding: UTF-8
+
 import re
 import os
-import sys
 import glob
-import sqlite3
-import argparse
+from collections import defaultdict
+from traceback import print_exc
 from lxml.etree import iterparse
 from parse_tools import *
-from traceback import print_exc
-from collections import defaultdict
 
 # parse assignment
 def parse_assign_gen3(elem, fname):
@@ -40,104 +40,117 @@ def parse_assign_gen3(elem, fname):
     # patent info
     pat['patnums'] = [prune_patnum(pn) for pn in gen3_assign(patents)]
 
-    return store_patent(pat)
+    return pat
 
 # parse file
 def parse_file_gen3(fpath):
     _, fname = os.path.split(fpath)
     for event, elem in iterparse(fpath, tag='patent-assignment', events=['end'], recover=True):
-        if not parse_assign_gen3(elem, fname):
-            return False
+        yield parse_assign_gen3(elem, fname)
         clear(elem)
-    return True
-
-# parse input arguments
-parser = argparse.ArgumentParser(description='USPTO patent assignment parser.')
-parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
-parser.add_argument('--output', type=int, default=None, help='how often to output summary')
-parser.add_argument('--limit', type=int, default=None, help='only parse n patents')
-args = parser.parse_args()
 
 # table schema
-schema = {
-    'assignid': 'integer primary key', # unique assignment id
-    'patnum': 'text', # Patent number
-    'execdate': 'text', # Execution date
-    'recdate': 'text', # Reception date
-    'conveyance': 'text', # Conveyance description
-    'assignor': 'text', # Assignor name
-    'assignee': 'text', # Assignee name
-    'assignee_state': 'text', # State code
-    'assignee_country': 'text', # Assignee country
+schema_assign = {
+    'assignid': 'int', # unique assignment id
+    'patnum': 'str', # Patent number
+    'execdate': 'str', # Execution date
+    'recdate': 'str', # Reception date
+    'conveyance': 'str', # Conveyance description
+    'assignor': 'str', # Assignor name
+    'assignee': 'str', # Assignee name
+    'assignee_state': 'str', # State code
+    'assignee_country': 'str', # Assignee country
     'gen': 'int', # USPTO data format
-    'file': 'text', # path to source file
+    'file': 'str', # path to source file
 }
-tabsig = ', '.join([f'{k} {v}' for k, v in schema.items()])
-
-# connect to patent db
-if args.db is not None:
-    con = sqlite3.connect(args.db)
-    cur = con.cursor()
-    cur.execute(f'CREATE TABLE IF NOT EXISTS assign ({tabsig})')
-    chunker = ChunkInserter(con, table='assign')
-else:
-    chunker = DummyInserter()
 
 # chunking express
-i, p = 0, 0
-def store_patent(pat):
-    global i, p
-    i += 1
-
+def store_patent(pat, chunker_assign):
     # filter out individuals and non-transfers
     pat['assignor_type'] = org_type(pat['assignor'])
     pat['assignee_type'] = org_type(pat['assignee'])
     pat['convey_type'] = convey_type(pat['conveyance'])
     if pat['assignor_type'] == ORG_INDV or pat['assignee_type'] == ORG_INDV or pat['convey_type'] == CONV_OTHER:
-        return True
-    p += 1
+        return
 
     # store assign
     for pn in pat['patnums']:
         pat['patnum'] = pn
-        chunker.insert(*(pat[k] for k in schema))
+        chunker_assign.insert(*(pat[k] for k in schema_assign))
 
-    # logging
-    if args.output is not None and p % args.output == 0:
-        pat['npat'] = len(pat['patnums'])
-        print('[{npat:4d}]: {assignor:40.40s} [{assignor_type:1d}] -> {assignee:30.30s} [{assignee_type:1d}] ({recdate:8.8s}, {assignee_country:20.20s})'.format(**pat))
+# file level
+def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
+    fdir, fname = os.path.split(fpath)
+    ftag, fext = os.path.splitext(fname)
 
-    # break
-    if args.limit is not None and p >= args.limit:
-        return False
+    opath = os.path.join(output, ftag)
+    opath_assign = f'{opath}_assign.csv'
 
-    return True
+    if not overwrite:
+        if os.path.exists(opath_assign):
+            print(f'{ftag}: Skipping')
+            return
 
-# collect files
-if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-    targ_dir = 'data/assign' if len(args.target) == 0 else args.target[0]
-    file_list = sorted(glob.glob(f'{targ_dir}/*.xml'))
-else:
-    file_list = args.target
+    if not dryrun:
+        chunker_assign = ChunkWriter(opath_assign, schema=schema_assign)
+    else:
+        chunker_assign = DummyWriter()
 
-# do robust parsing
-for fpath in file_list:
-    print(f'Parsing {fpath}')
-    i0, p0 = i, p
-
+    # parse it up
     try:
-        parse_file_gen3(fpath)
+        print(f'{ftag}: Starting')
+
+        i = 0
+        for pat in parse_file_gen3(fpath):
+            i += 1
+
+            store_patent(pat, chunker_assign)
+
+            # output
+            if display > 0 and i % display == 0:
+                pat['npat'] = len(pat['patnums'])
+                print('[{npat:4d}]: {assignor:40.40s} [{assignor_type:1d}] -> {assignee:30.30s} [{assignee_type:1d}] ({recdate:8.8s}, {assignee_country:20.20s})'.format(**pat))
+
+        print(f'{ftag}: Parsed {i} records')
+
+        # clear out the rest
+        chunker_assign.commit()
     except Exception as e:
-        print('EXCEPTION OCCURRED!')
+        print(f'{ftag}: EXCEPTION OCCURRED!')
         print_exc()
 
-    print(f'Found {i-i0} records, {i} total')
-    print(f'Found {p-p0} transfers, {p} total')
-    print()
+        chunker_assign.delete()
 
-# clear out the rest
-chunker.commit()
+if __name__ == '__main__':
+    import argparse
+    from multiprocessing import Pool
 
-if args.db is not None:
-    con.close()
+    # parse input arguments
+    parser = argparse.ArgumentParser(description='patent application parser')
+    parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
+    parser.add_argument('--output', type=str, default='parsed/assign', help='directory to output to')
+    parser.add_argument('--display', type=int, default=1000, help='how often to display summary')
+    parser.add_argument('--dryrun', action='store_true', help='do not actually store')
+    parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
+    parser.add_argument('--cores', type=int, default=10, help='number of cores to use')
+    args = parser.parse_args()
+
+    # collect files
+    if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
+        targ_dir = 'data/assign' if len(args.target) == 0 else args.target[0]
+        file_list = sorted(glob.glob(f'{targ_dir}/*.xml'))
+    else:
+        file_list = args.target
+
+    # ensure output dir
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+
+    # apply options
+    opts = dict(overwrite=args.overwrite, dryrun=args.dryrun, display=args.display)
+    def parse_file_opts(fpath):
+        parse_file(fpath, args.output, **opts)
+
+    # parse files
+    with Pool(args.cores) as pool:
+        pool.map(parse_file_opts, file_list, chunksize=1)
