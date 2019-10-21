@@ -14,7 +14,6 @@ def parse_assign_gen3(elem, fname):
     pat = defaultdict(str)
     pat['gen'] = 3
     pat['file'] = fname
-    pat['assignid'] = None
 
     # top-level section
     record = elem.find('assignment-record')
@@ -51,7 +50,6 @@ def parse_file_gen3(fpath):
 
 # table schema
 schema_assign = {
-    'assignid': 'int', # unique assignment id
     'patnum': 'str', # Patent number
     'execdate': 'str', # Execution date
     'recdate': 'str', # Reception date

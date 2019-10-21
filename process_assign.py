@@ -1,12 +1,10 @@
 import argparse
-import sqlite3
-import numpy as np
 import pandas as pd
 from standardize import standardize_strong
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='USPTO assign fixer.')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
+parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
 args = parser.parse_args()
 
 # detect same entity transfers
@@ -255,16 +253,16 @@ country_map = {
     'burundi': 'bi'
 }
 
-# open database
-con = sqlite3.connect(args.db)
-
 # eliminate assignments within entities
-assn = pd.read_sql('select * from assign', con)
+dtypes = {'patnum': 'str', 'execdate': 'str', 'recdate': 'str'}
+assn = pd.read_csv(f'{args.output}/assign_assign.csv', dtype=dtypes)
+assn = assn.dropna(subset=['patnum', 'execdate'], axis=0)
 assn['assignee_state'] = assn['assignee_state'].map(state_map)
 assn['assignee_country'] = assn['assignee_country'].map(country_map)
 assn['same'] = assn[['assignor', 'assignee']].apply(lambda x: same_entity(*x), raw=True, axis=1)
 good = assn[~assn['same']].drop('same', axis=1)
-good.to_sql('assign_use', con, index=False, if_exists='replace')
+good = good.reset_index(drop=True).rename_axis('assignid', axis=0).reset_index()
+good.to_csv(f'{args.output}/assign_use.csv', index=False)
 
 # aggregated assignment stats
 pat_group = good.groupby('patnum')
@@ -272,7 +270,4 @@ assign_stats = pd.DataFrame({
     'first_trans': pat_group['execdate'].min(),
     'n_trans': pat_group.size()
 }).reset_index()
-assign_stats.to_sql('assign_stats', con, index=False, if_exists='replace')
-
-con.commit()
-con.close()
+assign_stats.to_csv(f'{args.output}/assign_stats.csv', index=False)

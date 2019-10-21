@@ -21,14 +21,14 @@ import simhash as sh
 # data processing routines
 #
 
-def generate_names(con):
+def generate_names(output):
     print('generating names')
 
-    apply = pd.read_sql('select appnum,appname from apply', con).dropna()
-    grant = pd.read_sql('select patnum,owner from grant', con).dropna()
-    assignor = pd.read_sql('select assignid,assignor from assign_use', con).dropna()
-    assignee = pd.read_sql('select assignid,assignee from assign_use', con).dropna()
-    compustat = pd.read_sql('select compid,name from compustat', con).dropna()
+    apply = pd.read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appname']).dropna()
+    grant = pd.read_csv(f'{output}/grant_grant.csv', usecols=['patnum', 'owner']).dropna()
+    assignor = pd.read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignor']).dropna()
+    assignee = pd.read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignee']).dropna()
+    compustat = pd.read_csv(f'{output}/compustat.csv', usecols=['compid', 'name']).dropna()
 
     apply = apply[apply['appname'].str.len()>0]
     grant = grant[grant['owner'].str.len()>0]
@@ -44,7 +44,7 @@ def generate_names(con):
 
     names = pd.concat([apply['name'], grant['name'], assignor['name'], assignee['name'], compustat['name']]).drop_duplicates().reset_index(drop=True)
     names = names.rename('name').rename_axis('id').reset_index()
-    names.to_sql('name', con, index=False, if_exists='replace')
+    names.to_csv(f'{output}/name.csv', index=False)
 
     apply = pd.merge(apply, names, how='left', on='name')
     grant = pd.merge(grant, names, how='left', on='name')
@@ -52,23 +52,22 @@ def generate_names(con):
     assignee = pd.merge(assignee, names, how='left', on='name')
     compustat = pd.merge(compustat, names, how='left', on='name')
 
-    apply[['appnum', 'id']].to_sql('apply_match', con, index=False, if_exists='replace')
-    grant[['patnum', 'id']].to_sql('grant_match', con, index=False, if_exists='replace')
-    assignor[['assignid', 'id']].to_sql('assignor_match', con, index=False, if_exists='replace')
-    assignee[['assignid', 'id']].to_sql('assignee_match', con, index=False, if_exists='replace')
-    compustat[['compid', 'id']].to_sql('compustat_match', con, index=False, if_exists='replace')
+    apply[['appnum', 'id']].to_csv(f'{output}/apply_match.csv', index=False)
+    grant[['patnum', 'id']].to_csv(f'{output}/grant_match.csv', index=False)
+    assignor[['assignid', 'id']].to_csv(f'{output}/assignor_match.csv', index=False)
+    assignee[['assignid', 'id']].to_csv(f'{output}/assignee_match.csv', index=False)
+    compustat[['compid', 'id']].to_csv(f'{output}/compustat_match.csv', index=False)
 
-    con.commit()
     print(f'found {len(names)} names')
 
 # k = 8, thresh = 4 works well
-def filter_pairs(con, nshingle=2, k=8, thresh=4):
+def filter_pairs(output, nshingle=2, k=8, thresh=4):
     print('filtering pairs')
 
     c = sh.Cluster(k=k, thresh=thresh)
     name_dict = {}
 
-    names = pd.read_sql('select id,name from name', con)
+    names = pd.read_csv(f'{output}/name.csv', usecols=['id', 'name'], na_filter=False)
     for i, id, name in names.itertuples():
         words = name.split()
         shings = list(sh.shingle(name, nshingle))
@@ -83,13 +82,12 @@ def filter_pairs(con, nshingle=2, k=8, thresh=4):
             print(f'{i}: {len(c.unions)}')
 
     pairs = pd.DataFrame([(i1, i2, name_dict[i1], name_dict[i2]) for i1, i2 in c.unions], columns=['id1', 'id2', 'name1', 'name2'])
-    pairs.to_sql('pair', con, index=False, if_exists='replace')
+    pairs.to_csv(f'{output}/pair.csv', index=False)
 
-    con.commit()
     print('Found %i pairs' % len(pairs))
 
 # compute distances on owners in same cluster
-def find_groups(con, thresh=0.85):
+def find_groups(output, thresh=0.85):
     print('finding matches')
 
     def dmetr(name1, name2):
@@ -101,7 +99,7 @@ def find_groups(con, thresh=0.85):
     close = []
     name_std = {}
 
-    pairs = pd.read_sql('select id1,id2,name1,name2 from pair', con)
+    pairs = pd.read_csv(f'{output}/pair.csv', usecols=['id1', 'id2', 'name1', 'name2'], na_filter=False)
     for i, id1, id2, name1, name2 in pairs.itertuples():
         if id1 not in name_std:
             name_std[id1] = standardize_strong(name1)
@@ -122,26 +120,25 @@ def find_groups(con, thresh=0.85):
     comps = sorted(nx.connected_components(G), key=len, reverse=True)
 
     match = pd.DataFrame(chain(*[zip(repeat(fid), ids) for fid, ids in enumerate(comps)]), columns=['firm_num', 'id'])
-    match.to_sql('match', con, index=False, if_exists='replace')
+    match.to_csv(f'{output}/match.csv', index=False)
 
-    con.commit()
     print(f'found {len(comps)} groups')
 
 # must be less than 1000000 components
-def merge_firms(con, base=1_000_000):
+def merge_firms(output, base=1_000_000):
     print('merging firms')
 
-    names = pd.read_sql('select * from name', con)
-    match = pd.read_sql('select * from match', con)
+    names = pd.read_csv(f'{output}/name.csv', na_filter=False)
+    match = pd.read_csv(f'{output}/match.csv', na_filter=False)
     firms = pd.merge(names, match, how='left', on='id')
     firms['firm_num'] = firms['firm_num'].fillna(firms['id']+base).astype(np.int)
-    firms[['firm_num', 'id']].to_sql('firm', con, index=False, if_exists='replace')
+    firms[['firm_num', 'id']].to_csv(f'{output}/firm.csv', index=False)
 
-    apply = pd.read_sql('select * from apply_match', con)
-    grant = pd.read_sql('select * from grant_match', con)
-    assignor = pd.read_sql('select * from assignor_match', con)
-    assignee = pd.read_sql('select * from assignee_match', con)
-    compustat = pd.read_sql('select * from compustat_match', con)
+    apply = pd.read_csv(f'{output}/apply_match.csv')
+    grant = pd.read_csv(f'{output}/grant_match.csv')
+    assignor = pd.read_csv(f'{output}/assignor_match.csv')
+    assignee = pd.read_csv(f'{output}/assignee_match.csv')
+    compustat = pd.read_csv(f'{output}/compustat_match.csv')
 
     apply = pd.merge(apply, firms, on='id')
     grant = pd.merge(grant, firms, on='id')
@@ -149,28 +146,22 @@ def merge_firms(con, base=1_000_000):
     assignee = pd.merge(assignee, firms, on='id')
     compustat = pd.merge(compustat, firms, on='id')
 
-    apply[['appnum', 'firm_num']].to_sql('apply_firm', con, index=False, if_exists='replace')
-    grant[['patnum', 'firm_num']].to_sql('grant_firm', con, index=False, if_exists='replace')
-    assignor[['assignid', 'firm_num']].to_sql('assignor_firm', con, index=False, if_exists='replace')
-    assignee[['assignid', 'firm_num']].to_sql('assignee_firm', con, index=False, if_exists='replace')
-    compustat[['compid', 'firm_num']].to_sql('compustat_firm', con, index=False, if_exists='replace')
-
-    con.commit()
-
-def get_groups(con):
-    return pd.read_sql('select * from match join name on match.id=name.id order by firm_num', con)
+    apply[['appnum', 'firm_num']].to_csv(f'{output}/apply_firm.csv', index=False)
+    grant[['patnum', 'firm_num']].to_csv(f'{output}/grant_firm.csv', index=False)
+    assignor[['assignid', 'firm_num']].to_csv(f'{output}/assignor_firm.csv', index=False)
+    assignee[['assignid', 'firm_num']].to_csv(f'{output}/assignee_firm.csv', index=False)
+    compustat[['compid', 'firm_num']].to_csv(f'{output}/compustat_firm.csv', index=False)
 
 if __name__ == "__main__":
     import argparse
 
     # parse input arguments
     parser = argparse.ArgumentParser(description='Create firm name clusters.')
-    parser.add_argument('--db', type=str, default=None, help='database file to store to')
+    parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
     args = parser.parse_args()
 
     # go through steps
-    with sqlite3.connect(args.db) as con:
-        generate_names(con)
-        filter_pairs(con)
-        find_groups(con)
-        merge_firms(con)
+    generate_names(output)
+    filter_pairs(output)
+    find_groups(output)
+    merge_firms(output)

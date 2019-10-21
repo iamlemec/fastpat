@@ -6,7 +6,7 @@ import pandas as pd
 # parse input arguments
 parser = argparse.ArgumentParser(description='USPTO maintenance file parser.')
 parser.add_argument('target', type=str, help='path of file to parse')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
+parser.add_argument('--output', type=str, default='tables', help='directory to store to')
 args = parser.parse_args()
 
 # import to dataframe
@@ -34,11 +34,8 @@ pat_groups = datf.groupby('patnum')
 dpat = pd.DataFrame({
     'last_maint': pat_groups['lag'].max().astype(int),
     'ever_large': ~pat_groups['is_small'].min().astype(bool)
-})
+}).reset_index()
 
-# commit to sql
+# write to disk
 print('writing table')
-
-with sqlite3.connect(args.db) as con:
-    dpat.to_sql('maint', con, if_exists='replace')
-    con.commit()
+dpat.to_csv(f'{args.output}/maint.csv', index=False)

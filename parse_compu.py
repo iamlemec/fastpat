@@ -1,11 +1,10 @@
 import argparse
-import sqlite3
 import pandas as pd
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='Compustat file parser.')
 parser.add_argument('target', type=str, help='path of file to parse')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
+parser.add_argument('--output', type=str, default='tables', help='directory to store to')
 args = parser.parse_args()
 
 colmap = {
@@ -54,7 +53,5 @@ datf['naics'] = datf['naics'].fillna(0).astype(int).map(lambda x: f'{x:<06d}')
 datf['sic'] = datf['naics'].fillna(0).astype(int).map(lambda x: f'{x:<06d}')
 datf = datf.reset_index(drop=True).rename_axis('compid').reset_index()
 
-# write to sql
-with sqlite3.connect(args.db) as con:
-    datf.to_sql('compustat', con, index=False, if_exists='replace')
-    con.commit()
+# write to disk
+datf.to_csv(f'{args.output}/compustat.csv', index=False)

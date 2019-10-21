@@ -7,15 +7,12 @@ import pandas as pd
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='Merge patent citation data.')
-parser.add_argument('--db', type=str, default=None, help='database file to store to')
+parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
 parser.add_argument('--chunk', type=int, default=10_000_000, help='chunk size for citations')
 args = parser.parse_args()
 
-# open database
-con = sqlite3.connect(args.db)
-
 # load in grant data
-grants = pd.read_sql('select * from grant_firm', con, index_col='patnum')
+grants = pd.read_csv(f'{args.output}/grant_firm.csv', index_col='patnum')
 
 # match and aggregates cites
 def aggregate_cites(cites):
@@ -38,11 +35,7 @@ def aggregate_cites(cites):
     return stats
 
 # loop ofer citation chunks (otherwise requires >32GB of RAM)
-request = pd.read_sql('select * from cite', con, chunksize=args.chunk)
+request = pd.read_csv(f'{args.output}/grant_cite.csv', chunksize=args.chunk)
 cite_stats = pd.concat([aggregate_cites(df) for df in request], axis=0)
 cite_stats = cite_stats.groupby('patnum').sum() # since patents can span multiple chunks
-cite_stats.to_sql('cite_stats', con, if_exists='replace')
-
-# close out
-con.commit()
-con.close()
+cite_stats.to_csv(f'{args.output}/cite_stats.csv')
