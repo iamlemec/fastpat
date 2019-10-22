@@ -9,10 +9,7 @@ import sqlite3
 import numpy as np
 import pandas as pd
 import networkx as nx
-try:
-    from distance.cdistance import levenshtein
-except:
-    from distance import levenshtein
+from editdistance import eval as levenshtein
 
 from standardize import standardize_weak, standardize_strong
 import simhash as sh
@@ -24,7 +21,8 @@ import simhash as sh
 def generate_names(output):
     print('generating names')
 
-    apply = pd.read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appname']).dropna()
+    dtypes = {'appnum': 'str'}
+    apply = pd.read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appname'], dtype=dtypes).dropna()
     grant = pd.read_csv(f'{output}/grant_grant.csv', usecols=['patnum', 'owner']).dropna()
     assignor = pd.read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignor']).dropna()
     assignee = pd.read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignee']).dropna()
@@ -93,7 +91,7 @@ def find_groups(output, thresh=0.85):
     def dmetr(name1, name2):
         max_len = max(len(name1), len(name2))
         max_dist = int(ceil(max_len*(1.0-thresh)))
-        ldist = levenshtein(name1, name2, max_dist=max_dist)
+        ldist = levenshtein(name1, name2)
         return (1.0 - float(ldist)/max_len) if (ldist != -1 and max_len != 0) else 0.0
 
     close = []
@@ -134,7 +132,8 @@ def merge_firms(output, base=1_000_000):
     firms['firm_num'] = firms['firm_num'].fillna(firms['id']+base).astype(np.int)
     firms[['firm_num', 'id']].to_csv(f'{output}/firm.csv', index=False)
 
-    apply = pd.read_csv(f'{output}/apply_match.csv')
+    dtypes = {'appnum': 'str'}
+    apply = pd.read_csv(f'{output}/apply_match.csv', dtype=dtypes)
     grant = pd.read_csv(f'{output}/grant_match.csv')
     assignor = pd.read_csv(f'{output}/assignor_match.csv')
     assignee = pd.read_csv(f'{output}/assignee_match.csv')
@@ -161,7 +160,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # go through steps
-    generate_names(output)
-    filter_pairs(output)
-    find_groups(output)
-    merge_firms(output)
+    generate_names(args.output)
+    filter_pairs(args.output)
+    find_groups(args.output)
+    merge_firms(args.output)

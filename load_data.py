@@ -34,6 +34,9 @@ if __name__ == '__main__':
     else:
         tasks = [(args.case, args.table)]
 
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+
     for c, t in tasks:
         print(c, t)
         concat_files(args.input, args.output, c, t)

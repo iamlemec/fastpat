@@ -1,31 +1,30 @@
-import sqlite3
 import numpy as np
 import pandas as pd
 from itertools import chain
+from parse_tools import astype
 
-def merge_grants(con):
+def merge_grants(output):
     print('Merging all grant data')
 
-    grant = pd.read_sql('select * from grant', con, index_col='patnum')
-    firm = pd.read_sql('select * from grant_firm', con, index_col='patnum')
-    cite = pd.read_sql('select * from cite_stats', con, index_col='patnum')
-    assign = pd.read_sql('select * from assign_stats', con, index_col='patnum')
-    maint = pd.read_sql('select * from maint', con, index_col='patnum')
+    dtypes = {'appnum': 'str', 'appdate': 'str', 'pubdate': 'str', 'first_trans': 'str', 'last_maint': 'str'}
+    grant = pd.read_csv(f'{output}/grant_grant.csv', index_col='patnum', dtype=dtypes)
+    firm = pd.read_csv(f'{output}/grant_firm.csv', index_col='patnum')
+    cite = pd.read_csv(f'{output}/cite_stats.csv', index_col='patnum')
+    assign = pd.read_csv(f'{output}/assign_stats.csv', index_col='patnum', dtype=dtypes)
+    maint = pd.read_csv(f'{output}/maint.csv', index_col='patnum')
 
     grant = grant.join(firm)
     grant = grant.join(cite)
     grant = grant.join(assign)
     grant = grant.join(maint)
 
-    fill_cols = ['n_cited', 'n_citing', 'n_self_cited', 'n_trans']
-    grant = grant.fillna({c: 0 for c in fill_cols})
-    grant[fill_cols] = grant[fill_cols].astype(np.int)
+    fill_cols = ['n_cited', 'n_citing', 'n_self_cited', 'n_trans', 'claims']
+    grant[fill_cols] = grant[fill_cols].fillna(0).astype(np.int)
 
-    int_cols = ['firm_num', 'claims', 'last_maint', 'ever_large']
+    int_cols = ['firm_num', 'ever_large']
     grant[int_cols] = grant[int_cols].astype('Int64')
 
-    grant.to_sql('grant_info', con, if_exists='replace')
-    con.commit()
+    grant.to_csv(f'{output}/grant_info.csv')
 
 def generate_firmyear(con):
     print('Generating all firm-years')
@@ -156,12 +155,11 @@ if __name__ == "__main__":
 
     # parse input arguments
     parser = argparse.ArgumentParser(description='Merge firm patent data.')
-    parser.add_argument('--db', type=str, default=None, help='database file to store to')
+    parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
     args = parser.parse_args()
 
     # go through steps
-    with sqlite3.connect(args.db) as con:
-        merge_grants(con)
-        merge_firmyear(con)
-        firm_statistics(con)
-        patent_stocks(con)
+    merge_grants(args.output)
+    merge_firmyear(args.output)
+    firm_statistics(args.output)
+    patent_stocks(args.output)

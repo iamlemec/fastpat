@@ -16,7 +16,7 @@ colspec = [(0, 13), (14, 22), (23, 24), (25, 33), (34, 42), (43, 51), (52, 56)]
 datf = pd.read_fwf(args.target, colspecs=colspec, usecols=[0, 2, 6], names=['patnum', 'is_small', 'event_code'])
 
 # normalize patent number
-datf['patnum'] = datf['patnum'].apply(lambda s: s.lstrip('0'))
+datf['patnum'] = datf['patnum'].apply(lambda s: s.lstrip('0').lower())
 
 # clean up data
 print('data cleanup')
