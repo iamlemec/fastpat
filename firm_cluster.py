@@ -12,6 +12,7 @@ import networkx as nx
 from editdistance import eval as levenshtein
 
 from standardize import standardize_weak, standardize_strong
+from firm_tools import read_csv
 import simhash as sh
 
 #
@@ -21,18 +22,11 @@ import simhash as sh
 def generate_names(output):
     print('generating names')
 
-    dtypes = {'appnum': 'str'}
-    apply = pd.read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appname'], dtype=dtypes).dropna()
-    grant = pd.read_csv(f'{output}/grant_grant.csv', usecols=['patnum', 'owner']).dropna()
-    assignor = pd.read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignor']).dropna()
-    assignee = pd.read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignee']).dropna()
-    compustat = pd.read_csv(f'{output}/compustat.csv', usecols=['compid', 'name']).dropna()
-
-    apply = apply[apply['appname'].str.len()>0]
-    grant = grant[grant['owner'].str.len()>0]
-    assignor = assignor[assignor['assignor'].str.len()>0]
-    assignee = assignee[assignee['assignee'].str.len()>0]
-    compustat = compustat[compustat['name'].str.len()>0]
+    apply = read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appname']).dropna()
+    grant = read_csv(f'{output}/grant_grant.csv', usecols=['patnum', 'owner']).dropna()
+    assignor = read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignor']).dropna()
+    assignee = read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignee']).dropna()
+    compustat = read_csv(f'{output}/compustat.csv', usecols=['compid', 'name']).dropna()
 
     apply['name'] = apply['appname'].apply(standardize_weak)
     grant['name'] = grant['owner'].apply(standardize_weak)
@@ -40,7 +34,8 @@ def generate_names(output):
     assignee['name'] = assignee['assignee'].apply(standardize_weak)
     compustat['name'] = compustat['name'].apply(standardize_weak)
 
-    names = pd.concat([apply['name'], grant['name'], assignor['name'], assignee['name'], compustat['name']]).drop_duplicates().reset_index(drop=True)
+    names = pd.concat([apply['name'], grant['name'], assignor['name'], assignee['name'], compustat['name']]).drop_duplicates()
+    names = names[names.str.len()>0].reset_index(drop=True)
     names = names.rename('name').rename_axis('id').reset_index()
     names.to_csv(f'{output}/name.csv', index=False)
 
@@ -65,7 +60,7 @@ def filter_pairs(output, nshingle=2, k=8, thresh=4):
     c = sh.Cluster(k=k, thresh=thresh)
     name_dict = {}
 
-    names = pd.read_csv(f'{output}/name.csv', usecols=['id', 'name'], na_filter=False)
+    names = read_csv(f'{output}/name.csv', usecols=['id', 'name'])
     for i, id, name in names.itertuples():
         words = name.split()
         shings = list(sh.shingle(name, nshingle))
@@ -97,7 +92,7 @@ def find_groups(output, thresh=0.85):
     close = []
     name_std = {}
 
-    pairs = pd.read_csv(f'{output}/pair.csv', usecols=['id1', 'id2', 'name1', 'name2'], na_filter=False)
+    pairs = read_csv(f'{output}/pair.csv', usecols=['id1', 'id2', 'name1', 'name2'])
     for i, id1, id2, name1, name2 in pairs.itertuples():
         if id1 not in name_std:
             name_std[id1] = standardize_strong(name1)
@@ -126,18 +121,17 @@ def find_groups(output, thresh=0.85):
 def merge_firms(output, base=1_000_000):
     print('merging firms')
 
-    names = pd.read_csv(f'{output}/name.csv', na_filter=False)
-    match = pd.read_csv(f'{output}/match.csv', na_filter=False)
+    names = read_csv(f'{output}/name.csv')
+    match = read_csv(f'{output}/match.csv')
     firms = pd.merge(names, match, how='left', on='id')
     firms['firm_num'] = firms['firm_num'].fillna(firms['id']+base).astype(np.int)
     firms[['firm_num', 'id']].to_csv(f'{output}/firm.csv', index=False)
 
-    dtypes = {'appnum': 'str'}
-    apply = pd.read_csv(f'{output}/apply_match.csv', dtype=dtypes)
-    grant = pd.read_csv(f'{output}/grant_match.csv')
-    assignor = pd.read_csv(f'{output}/assignor_match.csv')
-    assignee = pd.read_csv(f'{output}/assignee_match.csv')
-    compustat = pd.read_csv(f'{output}/compustat_match.csv')
+    apply = read_csv(f'{output}/apply_match.csv')
+    grant = read_csv(f'{output}/grant_match.csv')
+    assignor = read_csv(f'{output}/assignor_match.csv')
+    assignee = read_csv(f'{output}/assignee_match.csv')
+    compustat = read_csv(f'{output}/compustat_match.csv')
 
     apply = pd.merge(apply, firms, on='id')
     grant = pd.merge(grant, firms, on='id')

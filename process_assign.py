@@ -1,6 +1,7 @@
 import argparse
 import pandas as pd
 from standardize import standardize_strong
+from firm_tools import read_csv
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='USPTO assign fixer.')
@@ -254,8 +255,7 @@ country_map = {
 }
 
 # eliminate assignments within entities
-dtypes = {'patnum': 'str', 'execdate': 'str', 'recdate': 'str'}
-assn = pd.read_csv(f'{args.output}/assign_assign.csv', dtype=dtypes)
+assn = read_csv(f'{args.output}/assign_assign.csv')
 assn = assn.dropna(subset=['patnum', 'execdate'], axis=0)
 assn['assignee_state'] = assn['assignee_state'].map(state_map)
 assn['assignee_country'] = assn['assignee_country'].map(country_map)

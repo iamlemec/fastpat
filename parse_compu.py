@@ -54,4 +54,4 @@ datf['sic'] = datf['naics'].fillna(0).astype(int).map(lambda x: f'{x:<06d}')
 datf = datf.reset_index(drop=True).rename_axis('compid').reset_index()
 
 # write to disk
-datf.to_csv(f'{args.output}/compustat.csv', index=False)
+datf.to_csv(f'{args.output}/compustat.csv', index=False, float_format='%.3f')

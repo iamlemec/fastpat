@@ -1,17 +1,16 @@
 import numpy as np
 import pandas as pd
 from itertools import chain
-from parse_tools import astype
+from firm_tools import read_csv
 
 def merge_grants(output):
     print('Merging all grant data')
 
-    dtypes = {'appnum': 'str', 'appdate': 'str', 'pubdate': 'str', 'first_trans': 'str'}
-    grant = pd.read_csv(f'{output}/grant_grant.csv', index_col='patnum', dtype=dtypes)
-    firm = pd.read_csv(f'{output}/grant_firm.csv', index_col='patnum')
-    cite = pd.read_csv(f'{output}/cite_stats.csv', index_col='patnum')
-    assign = pd.read_csv(f'{output}/assign_stats.csv', index_col='patnum', dtype=dtypes)
-    maint = pd.read_csv(f'{output}/maint.csv', index_col='patnum')
+    grant = read_csv(f'{output}/grant_grant.csv').set_index('patnum')
+    firm = read_csv(f'{output}/grant_firm.csv').set_index('patnum')
+    cite = read_csv(f'{output}/cite_stats.csv').set_index('patnum')
+    assign = read_csv(f'{output}/assign_stats.csv').set_index('patnum')
+    maint = read_csv(f'{output}/maint.csv').set_index('patnum')
 
     grant = grant.join(firm)
     grant = grant.join(cite)
@@ -31,9 +30,8 @@ def generate_firmyear(output):
     print('Generating all firm-years')
 
     # patent applications
-    dtypes = {'appnum': 'str', 'appdate': 'str', 'pubdate': 'str', 'execdate': 'str', 'naics': 'Int64', 'sic': 'Int64'}
-    apply = pd.read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appdate'], dtype=dtypes)
-    apply_firm = pd.read_csv(f'{output}/apply_firm.csv', dtype=dtypes).set_index('appnum')
+    apply = read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appdate'])
+    apply_firm = read_csv(f'{output}/apply_firm.csv').set_index('appnum')
     apply = apply.join(apply_firm, on='appnum', how='inner')
     apply['appyear'] = apply['appdate'].str.slice(0, 4).astype(np.int)
 
@@ -41,10 +39,11 @@ def generate_firmyear(output):
     apply_fy = apply_fy.rename_axis(index={'appyear': 'year'})
 
     # patent grants
-    grant = pd.read_csv(f'{output}/grant_info.csv', usecols=['patnum', 'pubdate', 'n_cited', 'n_citing', 'n_self_cited'], dtype=dtypes)
-    grant_firm = pd.read_csv(f'{output}/grant_firm.csv', index_col='patnum')
-    grant = grant.join(grant_firm, on='patnum', how='inner')
+    grant = read_csv(f'{output}/grant_info.csv', usecols=['patnum', 'pubdate', 'n_cited', 'n_citing', 'n_self_cited'])
+    grant_firm = read_csv(f'{output}/grant_firm.csv').set_index('patnum')
+    grant = grant.dropna(subset=['pubdate'], axis=0)
     grant['pubyear'] = grant['pubdate'].str.slice(0, 4).astype(np.int)
+    grant = grant.join(grant_firm, on='patnum', how='inner')
 
     grant_groups = grant.groupby(['firm_num', 'pubyear'])
     grant_fy = grant_groups[['n_cited', 'n_citing', 'n_self_cited']].sum()
@@ -52,9 +51,9 @@ def generate_firmyear(output):
     grant_fy = grant_fy.rename_axis(index={'pubyear': 'year'})
 
     # patent assignments
-    assign = pd.read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'execdate'], dtype=dtypes)
-    assignor_firm = pd.read_csv(f'{output}/assignor_firm.csv', index_col='assignid')
-    assignee_firm = pd.read_csv(f'{output}/assignee_firm.csv', index_col='assignid')
+    assign = read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'execdate'])
+    assignor_firm = read_csv(f'{output}/assignor_firm.csv').set_index('assignid')
+    assignee_firm = read_csv(f'{output}/assignee_firm.csv').set_index('assignid')
     assign = assign.join(assignor_firm.add_prefix('assignor_'), on='assignid', how='inner')
     assign = assign.join(assignee_firm.add_prefix('assignee_'), on='assignid', how='inner')
     assign['execyear'] = assign['execdate'].str.slice(0, 4).astype(np.int)
@@ -66,8 +65,8 @@ def generate_firmyear(output):
     assignee_fy = assignee_fy.rename_axis(index={'assignee_firm_num': 'firm_num', 'execyear': 'year'})
 
     # compustat firms
-    compu = pd.read_csv(f'{output}/compustat.csv', dtype=dtypes)
-    compu_firm = pd.read_csv(f'{output}/compustat_firm.csv', index_col='compid')
+    compu = read_csv(f'{output}/compustat.csv')
+    compu_firm = read_csv(f'{output}/compustat_firm.csv').set_index('compid')
     compu = compu.join(compu_firm, on='compid', how='inner')
 
     compu_fy = compu.groupby(['firm_num', 'year'])[['assets', 'capx', 'cash', 'cogs', 'deprec', 'income', 'employ', 'intan', 'debt', 'revenue', 'sales', 'rnd', 'fcost', 'mktval']].sum()
@@ -79,14 +78,13 @@ def generate_firmyear(output):
     int_cols = ['n_apply', 'n_grant', 'n_cited', 'n_citing', 'n_self_cited', 'n_source', 'n_dest']
     total[int_cols] = total[int_cols].astype('Int64')
 
-    total.to_csv(f'{output}/firmyear_info.csv', index=False)
+    total.to_csv(f'{output}/firmyear_info.csv', index=False, float_format='%.3f')
 
 def firm_statistics(output):
     print('Finding firm statistics')
 
     # firm history statistics
-    dtypes = {'naics': 'str', 'sic': 'str'}
-    firmyear = pd.read_csv(f'{output}/firmyear_info.csv', usecols=['firm_num', 'year', 'n_grant', 'naics', 'sic'], dtype=dtypes)
+    firmyear = read_csv(f'{output}/firmyear_info.csv', usecols=['firm_num', 'year', 'n_grant', 'naics', 'sic'])
     firm_groups = firmyear.groupby('firm_num')
     firm_life = pd.DataFrame({
         'year_min': firm_groups['year'].min(),
@@ -99,7 +97,7 @@ def firm_statistics(output):
     firm_life['life_span'] = firm_life['year_max'] - firm_life['year_min'] + 1
 
     # load in ipc info
-    grant = pd.read_csv(f'{output}/grant_info.csv', usecols=['firm_num', 'ipc'])
+    grant = read_csv(f'{output}/grant_info.csv', usecols=['firm_num', 'ipc'])
     grant = grant.dropna(subset=['firm_num'])
     grant['firm_num'] = grant['firm_num'].astype('Int64')
     grant['ipc4'] = grant['ipc'].str.slice(0, 4)
@@ -109,21 +107,19 @@ def firm_statistics(output):
     firm_ipc = count_ipc.reset_index(level='firm_num').groupby('firm_num')['count_ipc4']
     mode_ipc = firm_ipc.idxmax().rename('mode_ipc4')
     mode_ipc_count = firm_ipc.max().rename('mode_ipc4_count').astype('Int64')
-    all_ipc_count = firm_ipc.sum().rename('all_ipc4_count').astype('Int64')
     firm_life = firm_life.join(mode_ipc)
     firm_life = firm_life.join(mode_ipc_count)
-    firm_life = firm_life.join(all_ipc_count)
-    firm_life['mode_ipc4_frac'] = firm_life['mode_ipc4_count']/firm_life['all_ipc4_count']
-    # firm_life = firm_life.drop('mode_ipc4_count', axis=1)
+    firm_life['mode_ipc4_frac'] = firm_life['mode_ipc4_count']/firm_life['tot_pats']
+    firm_life = firm_life.drop('mode_ipc4_count', axis=1)
 
-    firm_life.to_csv(f'{output}/firm_life.csv')
+    firm_life.to_csv(f'{output}/firm_life.csv', float_format='%.3f')
 
 def patent_stocks(output):
     print('Constructing patent stocks')
 
     # load firm data
-    firmyear_info = pd.read_csv(f'{output}/firmyear_info.csv')
-    firm_info = pd.read_csv(f'{output}/firm_life.csv', usecols=['firm_num', 'year_min', 'year_max', 'life_span'])
+    firmyear_info = read_csv(f'{output}/firmyear_info.csv')
+    firm_info = read_csv(f'{output}/firm_life.csv', usecols=['firm_num', 'year_min', 'year_max', 'life_span'])
 
     # make (firm_num, year) index
     fnum_set = firm_info['firm_num']
@@ -152,7 +148,7 @@ def patent_stocks(output):
     datf_idx['stock'] = firm_groups['n_apply'].cumsum()
 
     # write new frame to disk
-    datf_idx.to_csv(f'{output}/firmyear_index.csv', index=False)
+    datf_idx.to_csv(f'{output}/firmyear_index.csv', index=False, float_format='%.3f')
 
 if __name__ == "__main__":
     import argparse
@@ -164,6 +160,6 @@ if __name__ == "__main__":
 
     # go through steps
     merge_grants(args.output)
-    merge_firmyear(args.output)
+    generate_firmyear(args.output)
     firm_statistics(args.output)
     patent_stocks(args.output)
