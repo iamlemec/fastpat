@@ -35,6 +35,14 @@ def read_csv(fname, **kwargs):
         dt.update(kwargs.pop('dtype'))
     return pd.read_csv(fname, dtype=dt, **kwargs)
 
+def astype(data, dtype):
+    if dtype == 'str':
+        return pd.Series(data, dtype='str')
+    elif dtype == 'int':
+        return pd.to_numeric(pd.Series(data), errors='coerce').astype('Int64')
+    else:
+        raise Exception(f'Unsupported type: {dtype}')
+
 # insert in chunks
 class ChunkWriter:
     def __init__(self, path, schema, chunk_size=1000, output=False):

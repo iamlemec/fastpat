@@ -55,18 +55,6 @@ def parse_wrapper(fpath, main_tag, parser):
             yield from parse_all()
 
 ##
-## csv interface
-##
-
-def astype(data, dtype):
-    if dtype == 'str':
-        return pd.Series(data, dtype='str')
-    elif dtype == 'int':
-        return pd.to_numeric(pd.Series(data), errors='coerce').astype('Int64')
-    else:
-        raise Exception(f'Unsupported type: {dtype}')
-
-##
 ## patnum parsers
 ##
 

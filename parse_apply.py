@@ -7,6 +7,7 @@ import glob
 from collections import defaultdict
 from traceback import print_exc
 from tools.parse import *
+from tools.tables import ChunkWriter, DummyWriter
 
 def parse_apply_gen2(elem, fname):
     pat = defaultdict(str)

@@ -8,6 +8,7 @@ from collections import defaultdict
 from traceback import print_exc
 from itertools import chain
 from tools.parse import *
+from tools.tables import ChunkWriter, DummyWriter
 
 # parse it up
 def parse_grant_gen1(fname):

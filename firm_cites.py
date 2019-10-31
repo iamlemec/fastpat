@@ -1,7 +1,6 @@
 # match citation data with aggregated firm data (to be run before firm_merge.py)
 
 import argparse
-import sqlite3
 import numpy as np
 import pandas as pd
 from tools.tables import read_csv

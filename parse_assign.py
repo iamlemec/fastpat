@@ -8,6 +8,7 @@ from collections import defaultdict
 from traceback import print_exc
 from lxml.etree import iterparse
 from tools.parse import *
+from tools.tables import ChunkWriter, DummyWriter
 
 # parse assignment
 def parse_assign_gen3(elem, fname):
