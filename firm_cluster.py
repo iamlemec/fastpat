@@ -1,55 +1,46 @@
 # name matching using locality-sensitive hashing (simhash)
 # these are mostly idempotent
 
-from itertools import chain, repeat, product
+from itertools import chain, repeat
 from collections import defaultdict
 from math import ceil
 
-import sqlite3
 import numpy as np
 import pandas as pd
 import networkx as nx
 from editdistance import eval as levenshtein
 
-from standardize import standardize_weak, standardize_strong
-from firm_tools import read_csv
-import simhash as sh
+from tools.standardize import standardize_weak, standardize_strong
+from tools.tables import read_csv
+from tools.simhash import shingle, Cluster
 
-#
-# data processing routines
-#
+# firm name sources - (tag, table, id_col, name_col)
+sources = [
+    ('apply', 'apply_apply', 'appnum', 'appname'),
+    ('grant', 'grant_grant', 'patnum', 'owner'),
+    ('assignor', 'assign_use', 'assignid', 'assignor'),
+    ('assignee', 'assign_use', 'assignid', 'assignee'),
+    ('compustat', 'compustat', 'compid', 'name'),
+]
 
+# find all unique names
 def generate_names(output):
     print('generating names')
 
-    apply = read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appname']).dropna()
-    grant = read_csv(f'{output}/grant_grant.csv', usecols=['patnum', 'owner']).dropna()
-    assignor = read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignor']).dropna()
-    assignee = read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'assignee']).dropna()
-    compustat = read_csv(f'{output}/compustat.csv', usecols=['compid', 'name']).dropna()
+    sdict = {}
+    for tag, table, id_col, name_col in sources:
+        src = read_csv(f'{output}/{table}.csv', usecols=[id_col, name_col]).dropna()
+        src['name'] = src[name_col].apply(standardize_weak)
+        sdict[tag] = src
 
-    apply['name'] = apply['appname'].apply(standardize_weak)
-    grant['name'] = grant['owner'].apply(standardize_weak)
-    assignor['name'] = assignor['assignor'].apply(standardize_weak)
-    assignee['name'] = assignee['assignee'].apply(standardize_weak)
-    compustat['name'] = compustat['name'].apply(standardize_weak)
-
-    names = pd.concat([apply['name'], grant['name'], assignor['name'], assignee['name'], compustat['name']]).drop_duplicates()
+    names = pd.concat([src['name'] for src in sdict.values()], axis=0).drop_duplicates()
     names = names[names.str.len()>0].reset_index(drop=True)
     names = names.rename('name').rename_axis('id').reset_index()
     names.to_csv(f'{output}/name.csv', index=False)
 
-    apply = pd.merge(apply, names, how='left', on='name')
-    grant = pd.merge(grant, names, how='left', on='name')
-    assignor = pd.merge(assignor, names, how='left', on='name')
-    assignee = pd.merge(assignee, names, how='left', on='name')
-    compustat = pd.merge(compustat, names, how='left', on='name')
-
-    apply[['appnum', 'id']].to_csv(f'{output}/apply_match.csv', index=False)
-    grant[['patnum', 'id']].to_csv(f'{output}/grant_match.csv', index=False)
-    assignor[['assignid', 'id']].to_csv(f'{output}/assignor_match.csv', index=False)
-    assignee[['assignid', 'id']].to_csv(f'{output}/assignee_match.csv', index=False)
-    compustat[['compid', 'id']].to_csv(f'{output}/compustat_match.csv', index=False)
+    for tag, table, id_col, name_col in sources:
+        src = pd.merge(sdict[tag], names, how='left', on='name')
+        src[[id_col, 'id']].to_csv(f'{output}/{tag}_match.csv', index=False)
 
     print(f'found {len(names)} names')
 
@@ -57,13 +48,13 @@ def generate_names(output):
 def filter_pairs(output, nshingle=2, k=8, thresh=4):
     print('filtering pairs')
 
-    c = sh.Cluster(k=k, thresh=thresh)
+    c = Cluster(k=k, thresh=thresh)
     name_dict = {}
 
     names = read_csv(f'{output}/name.csv', usecols=['id', 'name'])
     for i, id, name in names.itertuples():
         words = name.split()
-        shings = list(sh.shingle(name, nshingle))
+        shings = list(shingle(name, nshingle))
 
         features = shings + words
         weights = list(np.linspace(1.0, 0.0, len(shings))) + list(np.linspace(1.0, 0.0, len(words)))
@@ -118,7 +109,7 @@ def find_groups(output, thresh=0.85):
     print(f'found {len(comps)} groups')
 
 # must be less than 1000000 components
-def merge_firms(output, base=1_000_000):
+def merge_firms(output, base=1000000):
     print('merging firms')
 
     names = read_csv(f'{output}/name.csv')
@@ -127,23 +118,10 @@ def merge_firms(output, base=1_000_000):
     firms['firm_num'] = firms['firm_num'].fillna(firms['id']+base).astype(np.int)
     firms[['firm_num', 'id']].to_csv(f'{output}/firm.csv', index=False)
 
-    apply = read_csv(f'{output}/apply_match.csv')
-    grant = read_csv(f'{output}/grant_match.csv')
-    assignor = read_csv(f'{output}/assignor_match.csv')
-    assignee = read_csv(f'{output}/assignee_match.csv')
-    compustat = read_csv(f'{output}/compustat_match.csv')
-
-    apply = pd.merge(apply, firms, on='id')
-    grant = pd.merge(grant, firms, on='id')
-    assignor = pd.merge(assignor, firms, on='id')
-    assignee = pd.merge(assignee, firms, on='id')
-    compustat = pd.merge(compustat, firms, on='id')
-
-    apply[['appnum', 'firm_num']].to_csv(f'{output}/apply_firm.csv', index=False)
-    grant[['patnum', 'firm_num']].to_csv(f'{output}/grant_firm.csv', index=False)
-    assignor[['assignid', 'firm_num']].to_csv(f'{output}/assignor_firm.csv', index=False)
-    assignee[['assignid', 'firm_num']].to_csv(f'{output}/assignee_firm.csv', index=False)
-    compustat[['compid', 'firm_num']].to_csv(f'{output}/compustat_firm.csv', index=False)
+    for tag, table, id_col, name_col in sources:
+        src = read_csv(f'{output}/{tag}_match.csv')
+        src = pd.merge(src, firms, on='id')
+        src[[id_col, 'firm_num']].to_csv(f'{output}/{tag}_firm.csv', index=False)
 
 if __name__ == "__main__":
     import argparse

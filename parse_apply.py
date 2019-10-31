@@ -6,7 +6,7 @@ import os
 import glob
 from collections import defaultdict
 from traceback import print_exc
-from parse_tools import *
+from tools.parse import *
 
 def parse_apply_gen2(elem, fname):
     pat = defaultdict(str)

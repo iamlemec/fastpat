@@ -7,7 +7,7 @@ import glob
 from collections import defaultdict
 from traceback import print_exc
 from lxml.etree import iterparse
-from parse_tools import *
+from tools.parse import *
 
 # parse assignment
 def parse_assign_gen3(elem, fname):

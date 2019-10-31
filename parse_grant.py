@@ -7,7 +7,7 @@ import glob
 from collections import defaultdict
 from traceback import print_exc
 from itertools import chain
-from parse_tools import *
+from tools.parse import *
 
 # parse it up
 def parse_grant_gen1(fname):
