@@ -4,12 +4,12 @@ import argparse
 import sqlite3
 import numpy as np
 import pandas as pd
-from firm_tools import read_csv
+from tools.tables import read_csv
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='Merge patent citation data.')
 parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
-parser.add_argument('--chunk', type=int, default=10_000_000, help='chunk size for citations')
+parser.add_argument('--chunk', type=int, default=10000000, help='chunk size for citations')
 args = parser.parse_args()
 
 # load in grant data

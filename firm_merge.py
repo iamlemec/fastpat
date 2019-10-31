@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from itertools import chain
-from firm_tools import read_csv
+from tools.tables import read_csv
 
 def merge_grants(output):
     print('Merging all grant data')

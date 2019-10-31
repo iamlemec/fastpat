@@ -1,7 +1,7 @@
 import argparse
 import pandas as pd
-from standardize import standardize_strong
-from firm_tools import read_csv
+from tools.standardize import standardize_strong
+from tools.tables import read_csv
 
 # parse input arguments
 parser = argparse.ArgumentParser(description='USPTO assign fixer.')
