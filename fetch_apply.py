@@ -44,5 +44,3 @@ for name, path, url in sorted(url_list):
 # to extract:
 # cd data/apply
 # ls *.zip | xargs -n 1 unzip -n
-# rm *.txt
-# rm *.html

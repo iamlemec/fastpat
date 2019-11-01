@@ -26,8 +26,10 @@ def merge_grants(output):
     grant.drop('abstract', axis=1).to_csv(f'{output}/grant_info.csv')
     grant[['title', 'abstract']].to_csv(f'{output}/grant_text.csv')
 
-def generate_firmyear(output):
+def generate_firmyear(output, compustat=False):
     print('Generating all firm-years')
+
+    total = []
 
     # patent applications
     apply = read_csv(f'{output}/apply_apply.csv', usecols=['appnum', 'appdate'])
@@ -37,6 +39,7 @@ def generate_firmyear(output):
 
     apply_fy = apply.groupby(['firm_num', 'appyear']).size().rename('n_apply')
     apply_fy = apply_fy.rename_axis(index={'appyear': 'year'})
+    total.append(apply_fy)
 
     # patent grants
     grant = read_csv(f'{output}/grant_info.csv', usecols=['patnum', 'pubdate', 'n_cited', 'n_citing', 'n_self_cited'])
@@ -49,6 +52,7 @@ def generate_firmyear(output):
     grant_fy = grant_groups[['n_cited', 'n_citing', 'n_self_cited']].sum()
     grant_fy['n_grant'] = grant_groups.size()
     grant_fy = grant_fy.rename_axis(index={'pubyear': 'year'})
+    total.append(grant_fy)
 
     # patent assignments
     assign = read_csv(f'{output}/assign_use.csv', usecols=['assignid', 'execdate'])
@@ -60,21 +64,25 @@ def generate_firmyear(output):
 
     assignor_fy = assign.groupby(['assignor_firm_num', 'execyear']).size().rename('n_source')
     assignor_fy = assignor_fy.rename_axis(index={'assignor_firm_num': 'firm_num', 'execyear': 'year'})
+    total.append(assignor_fy)
 
     assignee_fy = assign.groupby(['assignee_firm_num', 'execyear']).size().rename('n_dest')
     assignee_fy = assignee_fy.rename_axis(index={'assignee_firm_num': 'firm_num', 'execyear': 'year'})
+    total.append(assignee_fy)
 
     # compustat firms
-    compu = read_csv(f'{output}/compustat.csv')
-    compu_firm = read_csv(f'{output}/compustat_firm.csv').set_index('compid')
-    compu = compu.join(compu_firm, on='compid', how='inner')
+    if compustat:
+        compu = read_csv(f'{output}/compustat.csv')
+        compu_firm = read_csv(f'{output}/compustat_firm.csv').set_index('compid')
+        compu = compu.join(compu_firm, on='compid', how='inner')
 
-    compu_fy = compu.groupby(['firm_num', 'year'])[['assets', 'capx', 'cash', 'cogs', 'deprec', 'income', 'employ', 'intan', 'debt', 'revenue', 'sales', 'rnd', 'fcost', 'mktval']].sum()
-    ind_info = compu.groupby(['firm_num', 'year'])[['naics', 'sic']].first()
-    compu_fy = compu_fy.join(ind_info)
+        compu_fy = compu.groupby(['firm_num', 'year'])[['assets', 'capx', 'cash', 'cogs', 'deprec', 'income', 'employ', 'intan', 'debt', 'revenue', 'sales', 'rnd', 'fcost', 'mktval']].sum()
+        ind_info = compu.groupby(['firm_num', 'year'])[['naics', 'sic']].first()
+        compu_fy = compu_fy.join(ind_info)
+        total.append(compu_fy)
 
     # comprehensive
-    total = pd.concat([apply_fy, grant_fy, assignor_fy, assignee_fy, compu_fy], axis=1).reset_index()
+    total = pd.concat(total, axis=1).reset_index()
     int_cols = ['n_apply', 'n_grant', 'n_cited', 'n_citing', 'n_self_cited', 'n_source', 'n_dest']
     total[int_cols] = total[int_cols].astype('Int64')
 
@@ -84,14 +92,12 @@ def firm_statistics(output):
     print('Finding firm statistics')
 
     # firm history statistics
-    firmyear = read_csv(f'{output}/firmyear_info.csv', usecols=['firm_num', 'year', 'n_grant', 'naics', 'sic'])
+    firmyear = read_csv(f'{output}/firmyear_info.csv', usecols=['firm_num', 'year', 'n_grant'])
     firm_groups = firmyear.groupby('firm_num')
     firm_life = pd.DataFrame({
         'year_min': firm_groups['year'].min(),
         'year_max': firm_groups['year'].max(),
-        'tot_pats': firm_groups['n_grant'].sum(),
-        'naics': firm_groups['naics'].first(),
-        'sic': firm_groups['sic'].first()
+        'tot_pats': firm_groups['n_grant'].sum()
     })
     firm_life['tot_pats'] = firm_life['tot_pats'].fillna(0).astype(np.int)
     firm_life['life_span'] = firm_life['year_max'] - firm_life['year_min'] + 1
@@ -156,10 +162,11 @@ if __name__ == "__main__":
     # parse input arguments
     parser = argparse.ArgumentParser(description='Merge firm patent data.')
     parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
+    parser.add_argument('--compustat', action='store_true', help='include compustat in merge')
     args = parser.parse_args()
 
     # go through steps
     merge_grants(args.output)
-    generate_firmyear(args.output)
+    generate_firmyear(args.output, compustat=args.compustat)
     firm_statistics(args.output)
     patent_stocks(args.output)

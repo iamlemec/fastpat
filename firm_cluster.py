@@ -20,7 +20,7 @@ sources = [
     ('grant', 'grant_grant', 'patnum', 'owner'),
     ('assignor', 'assign_use', 'assignid', 'assignor'),
     ('assignee', 'assign_use', 'assignid', 'assignee'),
-    ('compustat', 'compustat', 'compid', 'name'),
+    # ('compustat', 'compustat', 'compid', 'name'),
 ]
 
 # find all unique names

@@ -341,7 +341,7 @@ if __name__ == '__main__':
     parser.add_argument('--display', type=int, default=1000, help='how often to display summary')
     parser.add_argument('--dryrun', action='store_true', help='do not actually store')
     parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
-    parser.add_argument('--cores', type=int, default=10, help='number of cores to use')
+    parser.add_argument('--threads', type=int, default=10, help='number of threads to use')
     args = parser.parse_args()
 
     # collect files
@@ -361,5 +361,5 @@ if __name__ == '__main__':
         parse_file(fpath, args.output, **opts)
 
     # parse files
-    with Pool(args.cores) as pool:
+    with Pool(args.threads) as pool:
         pool.map(parse_file_opts, file_list, chunksize=1)
