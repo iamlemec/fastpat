@@ -1,4 +1,8 @@
+## USPTO Patent Parser
+
 Parse patent application, grant, assignment, and maintenance info from [USPTO Bulk Data](https://bulkdata.uspto.gov/). This handles all patent formats and outputs to pure CSV. Clusters patents by firm name, first filtering using locality-sensitive hashing, then finding components induced by a Levenshtein distance threshhold.
+
+### Usage
 
 Below is the pipeline that you'll want to follow. The entire process is designed to idempotent, meaning you can rerun any step to propagate updates.
 
