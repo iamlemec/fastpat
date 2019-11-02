@@ -952,3 +952,6 @@ ipgb20190917_wk38.zip
 ipgb20190924_wk39.zip
 ipgb20191001_wk40.zip
 ipgb20191008_wk41.zip
+ipgb20191015_wk42.zip
+ipgb20191022_wk43.zip
+ipgb20191029_wk44.zip

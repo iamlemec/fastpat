@@ -1,5 +1,6 @@
 #!/bin/env python3
 
+import re
 import os
 import time
 import argparse
@@ -9,31 +10,44 @@ parser.add_argument('--files', type=str, default='meta/assign_files.txt', help='
 parser.add_argument('--output', type=str, default='data/assign', help='directory to store fetched files')
 parser.add_argument('--delay', type=int, default=1, help='number of seconds to wait between files')
 parser.add_argument('--overwrite', action='store_true', help='overwrite existing files')
+parser.add_argument('--dryrun', action='store_true', help='just print commands that would be run')
 args = parser.parse_args()
 
 assign_url_fmt = 'https://bulkdata.uspto.gov/data/patent/assignment/{}'
 
+def get_base(base):
+    mat = re.match(r'ad\d{8}-(\d{8})-(\d{2}).zip', base)
+    if mat is not None:
+        date, idx = mat.groups()
+        return f'ad{date}-{idx}.zip'
+    else:
+        return base
+
+if args.dryrun:
+    system = print
+    delay = 0
+else:
+    system = os.system
+    delay = args.delay
+
 if not os.path.exists(args.output):
     os.mkdir(args.output)
 
-url_list = []
 for line in open(args.files):
-    line = line.strip()
-    path = os.path.join(args.output, line)
-    if not args.overwrite and os.path.isfile(path):
-        continue
+    zname = line.strip()
+    zbase, _ = os.path.splitext(zname)
+    base = get_base(zbase)
+    xname = f'{base}.xml'
 
-    year = int(line[2:6])
+    zpath = os.path.join(args.output, zname)
+    xpath = os.path.join(args.output, xname)
+    zurl = assign_url_fmt.format(zname)
 
-    url = assign_url_fmt.format(line)
-    url_list.append((line, path, url))
+    if args.overwrite or not os.path.isfile(zpath):
+        print(f'Fetching {zname}')
+        system(f'curl -o {zpath} {zurl}')
+        time.sleep(delay)
 
-for name, path, url in sorted(url_list):
-    print(f'Fetching {name}')
-    os.system(f'curl -o {path} {url}')
-    print()
-    time.sleep(args.delay)
-
-# extract files
-# cd data/assign
-# ls *.zip | xargs -n 1 unzip -n
+    if args.overwrite or not os.path.isfile(xpath):
+        print(f'Unzipping {zname}')
+        system(f'unzip {zpath} -d {args.output}')

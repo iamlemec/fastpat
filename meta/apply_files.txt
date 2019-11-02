@@ -967,3 +967,7 @@ ipab20190912_wk37.zip
 ipab20190919_wk38.zip
 ipab20190926_wk39.zip
 ipab20191003_wk40.zip
+ipab20191010_wk41.zip
+ipab20191017_wk42.zip
+ipab20191024_wk43.zip
+ipab20191031_wk44.zip

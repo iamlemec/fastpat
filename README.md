@@ -1,14 +1,10 @@
-Parse patent application, grant, assignment, and maintenance info from [USPTO Bulk Data](https://bulkdata.uspto.gov/). This handles all patent formats (dat, pgb, ipgb, pab, ipab) and outputs to pure CSV. Clusters patents by firm name, first filtering using locality-sensitive hashing, then finding components induced by a Levenshtein distance threshhold.
+Parse patent application, grant, assignment, and maintenance info from [USPTO Bulk Data](https://bulkdata.uspto.gov/). This handles all patent formats and outputs to pure CSV. Clusters patents by firm name, first filtering using locality-sensitive hashing, then finding components induced by a Levenshtein distance threshhold.
 
-Below is the pipeline that you'll want to follow. The entire pipeline is designed to idempotent, meaning if you can rerun any step to propagate updates.
+Below is the pipeline that you'll want to follow. The entire process is designed to idempotent, meaning you can rerun any step to propagate updates.
 
 #### Downloading Data
 
-You can download the raw XML data files using the `fetch_*.py` files. These look in the respective `meta/*_files.txt` for the list of files to download. After fetching the files, you have to unzip them. You can do this in each directly by running:
-
-`ls *.zip | xargs -n 1 unzip -n`
-
-The fetch scripts by default will not overwrite existing files and will only download those that are absent.
+You can download and extract the raw XML data files using the `fetch_*.py` files. These look in the respective `meta/*_files.txt` for the list of files to download and store them in the corresponding `data/*`. The fetch scripts by default will not overwrite existing files and will only download those that are absent.
 
 #### Parsing Data
 
