@@ -1,0 +1,7 @@
+numpy
+pandas
+lxml
+xxhash
+editdistance
+networkx
+Cython

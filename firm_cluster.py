@@ -14,21 +14,21 @@ from tools.standardize import standardize_weak, standardize_strong
 from tools.tables import read_csv
 from tools.simhash import shingle, Cluster
 
-# firm name sources - (tag, table, id_col, name_col)
-sources = [
-    ('apply', 'apply_apply', 'appnum', 'appname'),
-    ('grant', 'grant_grant', 'patnum', 'owner'),
-    ('assignor', 'assign_use', 'assignid', 'assignor'),
-    ('assignee', 'assign_use', 'assignid', 'assignee'),
-    # ('compustat', 'compustat', 'compid', 'name'),
-]
+# firm name sources - tag: (table, id_col, name_col)
+colmap = {
+    'apply': ('apply_apply', 'appnum', 'appname'),
+    'grant': ('grant_grant', 'patnum', 'owner'),
+    'assignor': ('assign_use', 'assignid', 'assignor'),
+    'assignee': ('assign_use', 'assignid', 'assignee'),
+    'compustat': ('compustat', 'compid', 'name'),
+}
 
 # find all unique names
-def generate_names(output):
+def generate_names(output, columns):
     print('generating names')
 
     sdict = {}
-    for tag, table, id_col, name_col in sources:
+    for tag, (table, id_col, name_col) in columns.items():
         src = read_csv(f'{output}/{table}.csv', usecols=[id_col, name_col]).dropna()
         src['name'] = src[name_col].apply(standardize_weak)
         sdict[tag] = src
@@ -38,7 +38,7 @@ def generate_names(output):
     names = names.rename('name').rename_axis('id').reset_index()
     names.to_csv(f'{output}/name.csv', index=False)
 
-    for tag, table, id_col, name_col in sources:
+    for tag, (table, id_col, name_col) in columns.items():
         src = pd.merge(sdict[tag], names, how='left', on='name')
         src[[id_col, 'id']].to_csv(f'{output}/{tag}_match.csv', index=False)
 
@@ -109,7 +109,7 @@ def find_groups(output, thresh=0.85):
     print(f'found {len(comps)} groups')
 
 # must be less than 1000000 components
-def merge_firms(output, base=1000000):
+def merge_firms(output, columns, base=1000000):
     print('merging firms')
 
     names = read_csv(f'{output}/name.csv')
@@ -118,7 +118,7 @@ def merge_firms(output, base=1000000):
     firms['firm_num'] = firms['firm_num'].fillna(firms['id']+base).astype(np.int)
     firms[['firm_num', 'id']].to_csv(f'{output}/firm.csv', index=False)
 
-    for tag, table, id_col, name_col in sources:
+    for tag, (table, id_col, name_col) in columns.items():
         src = read_csv(f'{output}/{tag}_match.csv')
         src = pd.merge(src, firms, on='id')
         src[[id_col, 'firm_num']].to_csv(f'{output}/{tag}_firm.csv', index=False)
@@ -128,11 +128,16 @@ if __name__ == "__main__":
 
     # parse input arguments
     parser = argparse.ArgumentParser(description='Create firm name clusters.')
+    parser.add_argument('sources', nargs='*', type=str, help='data sources to use')
     parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
     args = parser.parse_args()
 
+    sources0 = ['apply', 'grant', 'assignee', 'assignor']
+    sources = args.sources if len(args.sources) > 0 else sources0
+    columns = {s: colmap[s] for s in sources}
+
     # go through steps
-    generate_names(args.output)
+    generate_names(args.output, columns)
     filter_pairs(args.output)
     find_groups(args.output)
-    merge_firms(args.output)
+    merge_firms(args.output, columns)

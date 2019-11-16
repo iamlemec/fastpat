@@ -21,18 +21,13 @@ def concat_files(input, output, case, table):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='patent grant parser.')
+    parser.add_argument('sources', nargs='*', type=str, help='data sources to use')
     parser.add_argument('--input', type=str, default='parsed', help='input base directory')
     parser.add_argument('--output', type=str, default='tables', help='output directory')
-    parser.add_argument('--case', type=str, default=None, help='class of data to use')
-    parser.add_argument('--table', type=str, default=None, help='table to address')
     args = parser.parse_args()
 
-    if args.case is None:
-        tasks = chain(*[[(c, t) for t in ts] for c, ts in tables.items()])
-    elif args.table is None:
-        tasks = [(args.case, t) for t in tables[args.case]]
-    else:
-        tasks = [(args.case, args.table)]
+    sources = args.sources if len(args.sources) > 0 else list(tables)
+    tasks = chain(*[[(c, t) for t in tables[c]] for c in sources])
 
     if not os.path.exists(args.output):
         os.makedirs(args.output)
