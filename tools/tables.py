@@ -1,5 +1,6 @@
 # tools for patent data
 
+import os
 import pandas as pd
 
 # csv types
@@ -13,7 +14,9 @@ dtypes = {
     'naics': 'Int64',
     'sic': 'Int64',
     'appname': 'str',
+    'apptype': 'Int64',
     'owner': 'str',
+    'owntype': 'Int64',
     'assignor': 'str',
     'assignee': 'str',
     'firm_num': 'Int64',

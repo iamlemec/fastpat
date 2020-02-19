@@ -40,8 +40,11 @@ def parse_apply_gen2(elem, fname):
         pat['ipcver'] = get_text(ipcsec, 'classification-ipc-edition').lstrip('0')
         pat['ipcs'] = [ip for ip in gen2_ipc(ipcsec)]
 
-    # assignee name
-    pat['appname'] = get_text(bib, 'assignee/organization-name')
+    # assignee info
+    assn = bib.find('assignee')
+    if assn is not None:
+        pat['appname'] = get_text(assn, 'organization-name')
+        pat['apptype'] = get_text(assn, 'assignee-type')
 
     # first inventor address
     resid = bib.find('inventors/first-named-inventor/residence')
@@ -80,7 +83,12 @@ def parse_apply_gen3(elem, fname):
     # filing date
     pat['appnum'] = get_text(appref, 'document-id/doc-number')
     pat['appdate'] = get_text(appref, 'document-id/date')
-    pat['appname'] = get_text(bib, 'assignees/assignee/addressbook/orgname')
+
+    # assignee info
+    assn = bib.find('assignees/assignee/addressbook')
+    if assn is not None:
+        pat['appname'] = get_text(assn, 'orgname')
+        pat['apptype'] = get_text(assn, 'role')
 
     # title
     pat['title'] = get_text(bib, 'invention-title')
@@ -119,6 +127,7 @@ schema_apply = {
     'appnum': 'str', # Patent number
     'appdate': 'str', # Application date
     'appname': 'str', # Assignee name
+    'apptype': 'int', # Assignee type
     'pubnum': 'str', # Publication number
     'pubdate': 'str', # Publication date
     'ipc': 'str', # Main IPC code
@@ -174,6 +183,10 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
         parser = lambda fp: parse_wrapper(fp, 'us-patent-application', parse_apply_gen3)
     else:
         raise Exception(f'{ftag}: Unknown format')
+    if not overwrite:
+        if os.path.exists(opath_apply) and os.path.exists(opath_ipc):
+            print(f'{ftag}: Skipping')
+            return
 
     if not dryrun:
         chunker_apply = ChunkWriter(opath_apply, schema=schema_apply)

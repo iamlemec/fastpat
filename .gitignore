@@ -4,6 +4,7 @@ screenlog.*
 .ipynb_checkpoints
 __pychache__
 data/*/*
+test
 parsed
 tables
 export

@@ -39,7 +39,7 @@ def parse_grant_gen1(fname):
             pat['ipcs'] = []
             pat['cites'] = []
             src, apn = '', ''
-        elif tag in ['INVT', 'ASSG', 'PRIR', 'CLAS', 'UREF', 'FREF', 'OREF', 'LREP', 'PCTA', 'ABST']:
+        elif tag in ['INVT', 'ASSG', 'PRIR', 'CLAS', 'UREF', 'FREF', 'OREF', 'LREP', 'PCTA', 'ABST', 'REIS', 'RLAP', 'GOVT', 'DCLM']:
             sec = tag
         elif tag in ['PAL', 'PAR', 'PAC', 'PA0', 'PA1']:
             if sec == 'ABST':
@@ -77,6 +77,9 @@ def parse_grant_gen1(fname):
         elif tag == 'NAM':
             if sec == 'ASSG':
                 pat['owner'] = buf
+        elif tag == 'COD':
+            if sec == 'ASSG':
+                pat['owntype'] = buf
         elif tag == 'CTY':
             if sec == 'ASSG':
                 pat['city'] = buf
@@ -90,6 +93,8 @@ def parse_grant_gen1(fname):
         elif tag == 'PNO':
             if sec == 'UREF':
                 pat['cites'].append(prune_patnum(buf))
+        elif len(buf) == 0:
+            print(f'Unknown section: {tag}')
 
         # stage next tag and buf
         tag = ntag
@@ -132,14 +137,17 @@ def parse_grant_gen2(elem, fname):
         pat['cites'] = []
 
     # applicant name and address
-    ownref = bib.find('B700/B730/B731/PARTY-US')
-    if ownref is not None:
-        pat['owner'] = get_text(ownref, 'NAM/ONM/STEXT/PDAT')
-        address = ownref.find('ADR')
-        if address is not None:
-            pat['city'] = get_text(address, 'CITY/PDAT')
-            pat['state'] = get_text(address, 'STATE/PDAT')
-            pat['country'] = get_text(address, 'CTRY/PDAT')
+    assn = bib.find('B700/B730')
+    if assn is not None:
+        pat['owntype'] = get_text(assn, 'B732US/PDAT')
+        ownref = assn.find('B731/PARTY-US')
+        if ownref is not None:
+            pat['owner'] = get_text(ownref, 'NAM/ONM/STEXT/PDAT')
+            addr = ownref.find('ADR')
+            if addr is not None:
+                pat['city'] = get_text(addr, 'CITY/PDAT')
+                pat['state'] = get_text(addr, 'STATE/PDAT')
+                pat['country'] = get_text(addr, 'CTRY/PDAT')
 
     # abstract
     abspars = elem.findall('SDOAB/BTEXT/PARA')
@@ -199,14 +207,15 @@ def parse_grant_gen3(elem, fname):
         pat['cites'] = []
 
     # applicant name and address
-    assignee = bib.find('assignees/assignee/addressbook')
-    if assignee is not None:
-        pat['owner'] = get_text(assignee, 'orgname')
-        address = assignee.find('address')
-        if address is not None:
-            pat['city'] = get_text(address, 'city')
-            pat['state'] = get_text(address, 'state')
-            pat['country'] = get_text(address, 'country')
+    assn = bib.find('assignees/assignee/addressbook')
+    if assn is not None:
+        pat['owner'] = get_text(assn, 'orgname')
+        pat['owntype'] = get_text(assn, 'role')
+        addr = assn.find('address')
+        if addr is not None:
+            pat['city'] = get_text(addr, 'city')
+            pat['state'] = get_text(addr, 'state')
+            pat['country'] = get_text(addr, 'country')
 
     # abstract
     abspar = elem.find('abstract')
@@ -228,6 +237,7 @@ schema_grant = {
     'state': 'str', # State code
     'country': 'str', # Assignee country
     'owner': 'str', # Assignee name
+    'owntype': 'int', # Assignee type
     'claims': 'int', # Independent claim
     'title': 'str', # Title
     'abstract': 'str', # Abstract
