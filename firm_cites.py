@@ -22,7 +22,7 @@ def aggregate_cites(cites):
     cites = cites.rename(columns={'src': 'citer_pnum', 'dst': 'citee_pnum'})
     cites = cites.join(grants.add_prefix('citer_'), on='citer_pnum')
     cites = cites.join(grants.add_prefix('citee_'), on='citee_pnum')
-    cites['self_cite'] = (cites['citer_firm_num'] == cites['citee_firm_num'])
+    cites['self_cite'] = (cites['citer_firm_num'] == cites['citee_firm_num']).fillna(False)
 
     # patent level statistics
     stats = pd.DataFrame({
