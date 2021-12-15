@@ -28,13 +28,14 @@ def aggregate_cites(cites):
     stats = pd.DataFrame({
         'n_cited': cites.groupby('citer_pnum').size(),
         'n_citing': cites.groupby('citee_pnum').size(),
-        'n_self_cited': cites.groupby('citer_pnum')['self_cite'].sum()
+        'n_self_cited': cites.groupby('citer_pnum')['self_cite'].sum(),
+        'n_self_citing': cites.groupby('citee_pnum')['self_cite'].sum(),
     }).rename_axis(index='patnum')
     stats = stats.fillna(0).astype(np.int)
 
     return stats
 
-# loop ofer citation chunks (otherwise requires >32GB of RAM)
+# loop over citation chunks (otherwise requires >32GB of RAM)
 request = read_csv(f'{args.output}/grant_cite.csv', chunksize=args.chunk)
 cite_stats = pd.concat([aggregate_cites(df) for df in request], axis=0)
 cite_stats = cite_stats.groupby('patnum').sum() # since patents can span multiple chunks

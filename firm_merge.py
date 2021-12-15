@@ -3,7 +3,7 @@ import pandas as pd
 from itertools import chain
 from tools.tables import read_csv
 
-def merge_grants(output):
+def merge_grants(output='tables'):
     print('Merging all grant data')
 
     grant = read_csv(f'{output}/grant_grant.csv').set_index('patnum')
@@ -17,7 +17,7 @@ def merge_grants(output):
     grant = grant.join(assign)
     grant = grant.join(maint)
 
-    fill_cols = ['n_cited', 'n_citing', 'n_self_cited', 'n_trans', 'claims']
+    fill_cols = ['n_cited', 'n_citing', 'n_self_cited', 'n_self_citing', 'n_trans', 'claims']
     grant[fill_cols] = grant[fill_cols].fillna(0).astype(np.int)
 
     int_cols = ['firm_num', 'last_maint']
@@ -26,7 +26,7 @@ def merge_grants(output):
     grant.drop('abstract', axis=1).to_csv(f'{output}/grant_info.csv')
     grant[['title', 'abstract']].to_csv(f'{output}/grant_text.csv')
 
-def generate_firmyear(output, compustat=False):
+def generate_firmyear(output='tables', compustat=False):
     print('Generating all firm-years')
 
     total = []
@@ -88,7 +88,7 @@ def generate_firmyear(output, compustat=False):
 
     total.to_csv(f'{output}/firmyear_info.csv', index=False, float_format='%.3f')
 
-def firm_statistics(output):
+def firm_statistics(output='tables'):
     print('Finding firm statistics')
 
     # firm history statistics
@@ -120,7 +120,7 @@ def firm_statistics(output):
 
     firm_life.to_csv(f'{output}/firm_life.csv', float_format='%.3f')
 
-def patent_stocks(output):
+def patent_stocks(output='tables'):
     print('Constructing patent stocks')
 
     # load firm data
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # go through steps
-    merge_grants(args.output)
-    generate_firmyear(args.output, compustat=args.compustat)
-    firm_statistics(args.output)
-    patent_stocks(args.output)
+    merge_grants(output=args.output)
+    generate_firmyear(output=args.output, compustat=args.compustat)
+    firm_statistics(output=args.output)
+    patent_stocks(output=args.output)

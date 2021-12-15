@@ -2,4 +2,4 @@ grant:
 console.log($('.container > table:nth-child(3) > tbody > tr > td:nth-child(1)').map((i, x) => $(x).text()).toArray().join('\n'))
 
 assign:
-console.log($('.container > table:nth-child(4) > tbody > tr > td:nth-child(1)').map((i, x) => $(x).text()).toArray().join('\n'))
+console.log($('.container > table:nth-child(3) > tbody > tr > td:nth-child(1)').map((i, x) => $(x).text()).toArray().join('\n'))

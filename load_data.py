@@ -6,7 +6,8 @@ from itertools import chain
 tables = {
     'grant': ['grant', 'ipc', 'cite'],
     'apply': ['apply', 'ipc'],
-    'assign': ['assign']
+    'assign': ['assign'],
+    'tmapply': ['tmapply'],
 }
 
 def concat_files(input, output, case, table):

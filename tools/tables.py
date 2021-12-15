@@ -1,5 +1,6 @@
 # tools for patent data
 
+import os
 import pandas as pd
 
 # csv types
