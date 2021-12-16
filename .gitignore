@@ -3,7 +3,9 @@ screenlog.*
 *.pyc
 .ipynb_checkpoints
 __pychache__
+info
 data
 parsed
 tables
-meta/PatentFullTextAPSDoc_GreenBook.pdf
+export
+store
