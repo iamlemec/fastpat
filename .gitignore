@@ -3,6 +3,8 @@ screenlog.*
 *.pyc
 .ipynb_checkpoints
 __pychache__
+patents.egg-info
+dist
 info
 data
 parsed

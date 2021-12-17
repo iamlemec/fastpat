@@ -7,7 +7,8 @@ def fetch_file(zurl, output, overwrite=False, dryrun=False):
     system = print if dryrun else os.system
     zflags = '' if overwrite else '-n'
 
-    if not os.path.exists(output):
+    if not dryrun and not os.path.exists(output):
+        print(f'Creating directory {output}')
         os.makedirs(output)
 
     _, zname = os.path.split(zurl)
