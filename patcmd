@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import fire
+from importlib import resources
+from pathlib import Path
+
+import patents
+from patents.tools import fetch
+
+# common defaults
+DEFAULT_DELAY = 10
+
+def get_path(path, env):
+    if path is None:
+        if env in os.environ:
+            return Path(os.environ[env])
+        else:
+            return
+    else:
+        return Path(path)
+
+def split_lines(text):
+    return [s.strip() for s in text.split('\n') if len(s) > 0]
+
+def get_metafiles(ftype, metapath):
+    fname = f'{ftype}_files.txt'
+    if metapath is None:
+        return resources.read_text(patents, fname)
+    else:
+        return (metapath / fname).read_text()
+
+class Main:
+    def __init__(self, datadir=None, metadir=None):
+        self.datapath = get_path(datadir, 'PATENTS_DATADIR')
+        self.metapath = get_path(metadir, 'PATENTS_METADIR')
+
+        if self.datapath is None:
+            print('Must specify "datadir" path')
+            sys.exit()
+
+    def fetch(self, ftype, files=None, delay=DEFAULT_DELAY, dryrun=False):
+        if files is None:
+            ftext = get_metafiles(ftype, self.metapath)
+        else:
+            ftext = Path(files).read_text()
+        flist = split_lines(ftext)
+
+        output = self.datapath / 'raw' / ftype
+        fetch.fetch_many(flist, output, delay=delay, dryrun=dryrun)
+
+if __name__ == '__main__':
+    fire.Fire(Main)

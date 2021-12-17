@@ -5,7 +5,7 @@ import time
 
 def fetch_file(zurl, output, overwrite=False, dryrun=False):
     system = print if dryrun else os.system
-    zflags = '' if args.overwrite else '-n'
+    zflags = '' if overwrite else '-n'
 
     if not os.path.exists(output):
         os.makedirs(output)
@@ -18,7 +18,7 @@ def fetch_file(zurl, output, overwrite=False, dryrun=False):
         system(f'curl -o {zpath} {zurl}')
 
     print(f'Unzipping {zname}')
-    system(f'unzip {flags} {zpath} -d {output}')
+    system(f'unzip {zflags} {zpath} -d {output}')
 
 def fetch_many(files, output, delay=10, dryrun=False, **kwargs):
     for zurl in files:
