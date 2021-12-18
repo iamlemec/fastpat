@@ -7,8 +7,10 @@ import glob
 from collections import defaultdict
 from traceback import print_exc
 from lxml.etree import iterparse
-from tools.parse import *
-from tools.tables import ChunkWriter, DummyWriter
+from multiprocessing import Pool
+
+from ..tools.parse import *
+from ..tools.tables import ChunkWriter, DummyWriter
 
 # parse assignment
 def parse_assign_gen3(elem, fname):
@@ -78,7 +80,7 @@ def store_patent(pat, chunker_assign):
         chunker_assign.insert(*(pat[k] for k in schema_assign))
 
 # file level
-def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
+def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
     ftag, fext = os.path.splitext(fname)
 
@@ -90,10 +92,10 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
             print(f'{ftag}: Skipping')
             return
 
-    if not dryrun:
-        chunker_assign = ChunkWriter(opath_assign, schema=schema_assign)
-    else:
+    if dryrun:
         chunker_assign = DummyWriter()
+    else:
+        chunker_assign = ChunkWriter(opath_assign, schema=schema_assign)
 
     # parse it up
     try:
@@ -108,7 +110,11 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
             # output
             if display > 0 and i % display == 0:
                 pat['npat'] = len(pat['patnums'])
-                print('[{npat:4d}]: {assignor:40.40s} [{assignor_type:1d}] -> {assignee:30.30s} [{assignee_type:1d}] ({recdate:8.8s}, {assignee_country:20.20s})'.format(**pat))
+                print(
+                    '[{npat:4d}]: {assignor:40.40s} [{assignor_type:1d}] -> '
+                    '{assignee:30.30s} [{assignee_type:1d}] ({recdate:8.8s}, '
+                    '{assignee_country:20.20s})'.format(**pat)
+                )
 
         print(f'{ftag}: Parsed {i} records')
 
@@ -120,36 +126,26 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
 
         chunker_assign.delete()
 
-if __name__ == '__main__':
-    import argparse
-    from multiprocessing import Pool
-
-    # parse input arguments
-    parser = argparse.ArgumentParser(description='patent application parser')
-    parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
-    parser.add_argument('--output', type=str, default='parsed/assign', help='directory to output to')
-    parser.add_argument('--display', type=int, default=1000, help='how often to display summary')
-    parser.add_argument('--dryrun', action='store_true', help='do not actually store')
-    parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
-    parser.add_argument('--threads', type=int, default=10, help='number of threads to use')
-    args = parser.parse_args()
+# main entry point
+def parse_many(files, output, threads=10, display=1_000, overwrite=False, dryrun=False):
+    # needed for multiprocess
+    global parse_file_opts
 
     # collect files
-    if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-        targ_dir = 'data/assign' if len(args.target) == 0 else args.target[0]
-        file_list = sorted(glob.glob(f'{targ_dir}/*.xml'))
+    if type(files) is str or isinstance(files, os.PathLike):
+        file_list = sorted(glob.glob(f'{files}/*.xml'))
     else:
-        file_list = args.target
+        file_list = files
 
     # ensure output dir
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
+    if not dryrun and not os.path.exists(output):
+        print(f'Creating directory {output}')
+        os.makedirs(output)
 
     # apply options
-    opts = dict(overwrite=args.overwrite, dryrun=args.dryrun, display=args.display)
     def parse_file_opts(fpath):
-        parse_file(fpath, args.output, **opts)
+        parse_file(fpath, output, display=display, overwrite=overwrite, dryrun=dryrun)
 
     # parse files
-    with Pool(args.threads) as pool:
+    with Pool(threads) as pool:
         pool.map(parse_file_opts, file_list, chunksize=1)
