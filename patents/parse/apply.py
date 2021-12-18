@@ -6,8 +6,10 @@ import os
 import glob
 from collections import defaultdict
 from traceback import print_exc
-from tools.parse import *
-from tools.tables import ChunkWriter, DummyWriter
+from multiprocessing import Pool
+
+from ..tools.parse import *
+from ..tools.tables import ChunkWriter, DummyWriter
 
 def parse_apply_gen2(elem, fname):
     pat = defaultdict(str)
@@ -152,7 +154,7 @@ def store_patent(pat, chunker_pat, chunker_ipc):
     chunker_pat.insert(*(pat.get(k, '') for k in schema_apply))
 
 # file level
-def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
+def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
     ftag, fext = os.path.splitext(fname)
 
@@ -160,27 +162,24 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
     opath_apply = f'{opath}_apply.csv'
     opath_ipc = f'{opath}_ipc.csv'
 
-    if not overwrite:
-        if os.path.exists(opath_apply) and os.path.exists(opath_ipc):
-            print(f'{ftag}: Skipping')
-            return
+    complete = os.path.exists(opath_apply) and os.path.exists(opath_ipc)
+    if not overwrite and complete:
+        print(f'{ftag}: Skipping')
+        return
 
     if fname.startswith('pab'):
-        gen = 2
-        main_tag = 'patent-application-publication'
         parser = lambda fp: parse_wrapper(fp, 'patent-application-publication', parse_apply_gen2)
     elif fname.startswith('ipab'):
-        gen = 3
         parser = lambda fp: parse_wrapper(fp, 'us-patent-application', parse_apply_gen3)
     else:
         raise Exception(f'{ftag}: Unknown format')
 
-    if not dryrun:
-        chunker_apply = ChunkWriter(opath_apply, schema=schema_apply)
-        chunker_ipc = ChunkWriter(opath_ipc, schema=schema_ipc)
-    else:
+    if dryrun:
         chunker_apply = DummyWriter()
         chunker_ipc = DummyWriter()
+    else:
+        chunker_apply = ChunkWriter(opath_apply, schema=schema_apply)
+        chunker_ipc = ChunkWriter(opath_ipc, schema=schema_ipc)
 
     # parse it up
     try:
@@ -195,7 +194,11 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
             # output
             if display > 0 and i % display == 0:
                 spat = {k: pat.get(k, '') for k in schema_apply}
-                print('an = {appnum:10.10s}, fd = {appdate:10.10s}, ti = {title:30.30s}, on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}'.format(**spat))
+                print(
+                    'an = {appnum:10.10s}, fd = {appdate:10.10s}, ti = {title:30.30s}, '
+                    'on = {appname:30.30s}, ci = {city:15.15s}, st = {state:2s}, '
+                    'ct = {country:2s}'.format(**spat)
+                )
 
         # commit to db and close
         chunker_apply.commit()
@@ -209,36 +212,29 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
         chunker_apply.delete()
         chunker_ipc.delete()
 
-if __name__ == '__main__':
-    import argparse
-    from multiprocessing import Pool
-
-    # parse input arguments
-    parser = argparse.ArgumentParser(description='patent application parser')
-    parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
-    parser.add_argument('--output', type=str, default='parsed/apply', help='directory to output to')
-    parser.add_argument('--display', type=int, default=1000, help='how often to display summary')
-    parser.add_argument('--dryrun', action='store_true', help='do not actually store')
-    parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
-    parser.add_argument('--threads', type=int, default=10, help='number of threads to use')
-    args = parser.parse_args()
+# main entry point
+def parse_many(files, output, threads=10, display=1_000, overwrite=False, dryrun=False):
+    # needed for multiprocess
+    global parse_file_opts
 
     # collect files
-    if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-        targ_dir = 'data/apply' if len(args.target) == 0 else args.target[0]
-        file_list = sorted(glob.glob(f'{targ_dir}/pab*.xml')) + sorted(glob.glob(f'{targ_dir}/ipab*.xml'))
+    if type(files) is str or isinstance(files, os.PathLike):
+        file_list = (
+            sorted(glob.glob(f'{files}/pab*.xml')) +
+            sorted(glob.glob(f'{files}/ipab*.xml'))
+        )
     else:
-        file_list = args.target
+        file_list = files
 
     # ensure output dir
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
+    if not dryrun and not os.path.exists(output):
+        print(f'Creating directory {output}')
+        os.makedirs(output)
 
     # apply options
-    opts = dict(overwrite=args.overwrite, dryrun=args.dryrun, display=args.display)
     def parse_file_opts(fpath):
-        parse_file(fpath, args.output, **opts)
+        parse_file(fpath, output, display=display, overwrite=overwrite, dryrun=dryrun)
 
     # parse files
-    with Pool(args.threads) as pool:
+    with Pool(threads) as pool:
         pool.map(parse_file_opts, file_list, chunksize=1)

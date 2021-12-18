@@ -1,4 +1,5 @@
 #!/usr/bin/env python3.9
+# coding: UTF-8
 
 import os
 import sys
@@ -7,10 +8,7 @@ from importlib import resources
 from pathlib import Path
 
 import patents
-from patents import fetch
-
-# common defaults
-DEFAULT_DELAY = 10
+from patents import fetch_many, parse_apply, parse_grant
 
 def get_path(path, env):
     if path is None:
@@ -38,7 +36,7 @@ class Main:
         if self.metapath is None:
             self.metapath = resources.files(patents) / 'meta'
 
-    def fetch(self, ftype, files=None, delay=DEFAULT_DELAY, dryrun=False):
+    def fetch(self, ftype, files=None, delay=10, overwrite=False, dryrun=False):
         if files is None:
             fpath = self.metapath / f'{ftype}_files.txt'
         else:
@@ -46,7 +44,19 @@ class Main:
         flist = get_lines(fpath)
 
         output = self.datapath / 'raw' / ftype
-        fetch.fetch_many(flist, output, delay=delay, dryrun=dryrun)
+        fetch_many(flist, output, delay=delay, overwrite=overwrite, dryrun=dryrun)
+
+    def parse(self, ftype, files=None, overwrite=False, dryrun=False):
+        if files is None:
+            files = self.datapath / 'raw' / ftype
+        output = self.datapath / 'parsed' / ftype
+
+        if ftype == 'apply':
+            parse_apply(files, output, overwrite=overwrite, dryrun=dryrun)
+        elif ftype == 'grant':
+            parse_grant(files, output, overwrite=overwrite, dryrun=dryrun)
+        else:
+            print(f'Error: unknown data source "{ftype}"')
 
 if __name__ == '__main__':
     fire.Fire(Main)

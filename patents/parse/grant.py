@@ -7,8 +7,10 @@ import glob
 from collections import defaultdict
 from traceback import print_exc
 from itertools import chain
-from tools.parse import *
-from tools.tables import ChunkWriter, DummyWriter
+from multiprocessing import Pool
+
+from ..tools.parse import *
+from ..tools.tables import ChunkWriter, DummyWriter
 
 # parse it up
 def parse_grant_gen1(fname):
@@ -265,7 +267,7 @@ def store_patent(pat, chunker_grant, chunker_ipc, chunker_cite):
     chunker_grant.insert(*(pat.get(k, '') for k in schema_grant))
 
 # file level
-def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
+def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
     ftag, fext = os.path.splitext(fname)
 
@@ -274,19 +276,23 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
     opath_ipc = f'{opath}_ipc.csv'
     opath_cite = f'{opath}_cite.csv'
 
-    if not overwrite:
-        if os.path.exists(opath_grant) and os.path.exists(opath_ipc) and os.path.exists(opath_cite):
-            print(f'{ftag}: Skipping')
-            return
+    complete = (
+        os.path.exists(opath_grant) and
+        os.path.exists(opath_ipc) and
+        os.path.exists(opath_cite)
+    )
+    if not overwrite and complete:
+        print(f'{ftag}: Skipping')
+        return
 
-    if not dryrun:
-        chunker_grant = ChunkWriter(opath_grant, schema=schema_grant)
-        chunker_ipc = ChunkWriter(opath_ipc, schema=schema_ipc)
-        chunker_cite = ChunkWriter(opath_cite, schema=schema_cite)
-    else:
+    if dryrun:
         chunker_grant = DummyWriter()
         chunker_ipc = DummyWriter()
         chunker_cite = DummyWriter()
+    else:
+        chunker_grant = ChunkWriter(opath_grant, schema=schema_grant)
+        chunker_ipc = ChunkWriter(opath_ipc, schema=schema_ipc)
+        chunker_cite = ChunkWriter(opath_cite, schema=schema_cite)
 
     if fname.endswith('.dat'):
         gen = 1
@@ -314,7 +320,11 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
             # output if needed
             if display > 0 and i % display == 0:
                 spat = {k: pat.get(k, '') for k in schema_grant}
-                print('pn = {patnum:10.10s}, pd = {pubdate:10.10s}, ti = {title:30.30s}, on = {owner:30.30s}, ci = {city:15.15s}, st = {state:2s}, ct = {country:2s}'.format(**spat))
+                print(
+                    'pn = {patnum:10.10s}, pd = {pubdate:10.10s}, ti = {title:30.30s}, '
+                    'on = {owner:30.30s}, ci = {city:15.15s}, st = {state:2s}, '
+                    'ct = {country:2s}'.format(**spat)
+                )
 
         # commit remaining
         chunker_grant.commit()
@@ -330,36 +340,30 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
         chunker_ipc.delete()
         chunker_cite.delete()
 
-if __name__ == '__main__':
-    import argparse
-    from multiprocessing import Pool
-
-    # parse input arguments
-    parser = argparse.ArgumentParser(description='patent grant parser.')
-    parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
-    parser.add_argument('--output', type=str, default='parsed/grant', help='directory to output to')
-    parser.add_argument('--display', type=int, default=1000, help='how often to display summary')
-    parser.add_argument('--dryrun', action='store_true', help='do not actually store')
-    parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
-    parser.add_argument('--threads', type=int, default=10, help='number of threads to use')
-    args = parser.parse_args()
+# main entry point
+def parse_many(files, output, threads=10, display=1_000, overwrite=False, dryrun=False):
+    # needed for multiprocess
+    global parse_file_opts
 
     # collect files
-    if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-        targ_dir = 'data/grant' if len(args.target) == 0 else args.target[0]
-        file_list = sorted(glob.glob(f'{targ_dir}/*.dat')) + sorted(glob.glob(f'{targ_dir}/pgb*.xml')) + sorted(glob.glob(f'{targ_dir}/ipgb*.xml'))
+    if type(files) is str or isinstance(files, os.PathLike):
+        file_list = (
+            sorted(glob.glob(f'{files}/*.dat')) +
+            sorted(glob.glob(f'{files}/pgb*.xml')) +
+            sorted(glob.glob(f'{files}/ipgb*.xml'))
+        )
     else:
         file_list = args.target
 
     # ensure output dir
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
+    if not dryrun and not os.path.exists(output):
+        print(f'Creating directory {output}')
+        os.makedirs(output)
 
     # apply options
-    opts = dict(overwrite=args.overwrite, dryrun=args.dryrun, display=args.display)
     def parse_file_opts(fpath):
-        parse_file(fpath, args.output, **opts)
+        parse_file(fpath, output, display=display, overwrite=overwrite, dryrun=dryrun)
 
     # parse files
-    with Pool(args.threads) as pool:
+    with Pool(threads) as pool:
         pool.map(parse_file_opts, file_list, chunksize=1)
