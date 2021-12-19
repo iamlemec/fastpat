@@ -8,7 +8,7 @@ from importlib import resources
 from pathlib import Path
 
 import patents
-from patents import fetch_many, parse_apply, parse_grant, parse_assign
+from patents import fetch_many, parse_apply, parse_grant, parse_assign, parse_maint
 
 def get_path(path, env):
     if path is None:
@@ -57,6 +57,8 @@ class Main:
             parse_grant(files, output, overwrite=overwrite, dryrun=dryrun)
         elif ftype == 'assign':
             parse_assign(files, output, overwrite=overwrite, dryrun=dryrun)
+        elif ftype == 'maint':
+            parse_maint(files, output, overwrite=overwrite, dryrun=dryrun)
         else:
             print(f'Error: unknown data source "{ftype}"')
 
