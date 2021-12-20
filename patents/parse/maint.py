@@ -18,7 +18,7 @@ codes = pd.DataFrame(mmap, columns=['code', 'lag']).set_index('code')
 
 def parse_file(fpath, output, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
-    opath = os.path.join(output, 'maint.csv')
+    opath = os.path.join(output, 'maint_maint.csv')
 
     if not overwrite and os.path.exists(opath):
         print(f'{fname}: Skipping')

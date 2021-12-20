@@ -271,10 +271,9 @@ def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
     ftag, fext = os.path.splitext(fname)
 
-    opath = os.path.join(output, ftag)
-    opath_grant = f'{opath}_grant.csv'
-    opath_ipc = f'{opath}_ipc.csv'
-    opath_cite = f'{opath}_cite.csv'
+    opath_grant = os.path.join(output, f'grant_{ftag}.csv')
+    opath_ipc = os.path.join(output, f'ipc_{ftag}.csv')
+    opath_cite = os.path.join(output, f'cite_{ftag}.csv')
 
     complete = (
         os.path.exists(opath_grant) and

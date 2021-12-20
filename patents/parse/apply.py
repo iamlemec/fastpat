@@ -158,9 +158,8 @@ def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
     ftag, fext = os.path.splitext(fname)
 
-    opath = os.path.join(output, ftag)
-    opath_apply = f'{opath}_apply.csv'
-    opath_ipc = f'{opath}_ipc.csv'
+    opath_apply = os.path.join(output, f'apply_{ftag}.csv')
+    opath_ipc = os.path.join(output, f'ipc_{ftag}.csv')
 
     complete = os.path.exists(opath_apply) and os.path.exists(opath_ipc)
     if not overwrite and complete:

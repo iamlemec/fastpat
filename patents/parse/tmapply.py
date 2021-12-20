@@ -81,17 +81,16 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
     fdir, fname = os.path.split(fpath)
     ftag, fext = os.path.splitext(fname)
 
-    opath = os.path.join(output, ftag)
-    opath_tma = f'{opath}_tmapply.csv'
+    opath_tmapply = os.path.join(output, f'tmapply_{ftag}.csv')
 
-    if not overwrite and os.path.exists(opath_tma):
+    if not overwrite and os.path.exists(opath_tmapply):
         print(f'{ftag}: Skipping')
         return
 
     if dryrun:
         chunker_tma = DummyWriter()
     else:
-        chunker_tma = ChunkWriter(opath_tma, schema=schema_tmapply)
+        chunker_tma = ChunkWriter(opath_tmapply, schema=schema_tmapply)
 
     # parse it up
     try:
@@ -110,7 +109,7 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
             if display > 0 and i % display == 0:
                 stma = {k: tma.get(k, '') for k in schema_tmapply}
                 print(
-                    'fn = {file:30.30s}, sn = {serial:10.10s}, rd = {regdate:10.10s}, '
+                    'fn = {file:20.20s}, sn = {serial:10.10s}, rd = {regdate:10.10s}, '
                     'ic = {int_class:10.10s}, gs = {gs_codes:15.15s}, st = {statement:50.50s}, '
                     'ow = {owners:30.30s}'.format(**stma)
                 )

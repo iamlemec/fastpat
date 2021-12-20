@@ -37,7 +37,7 @@ dtype = {
 
 def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
-    opath = os.path.join(output, 'compustat.csv')
+    opath = os.path.join(output, 'compustat_compustat.csv')
 
     if not overwrite and os.path.exists(opath):
         print(f'{fname}: Skipping')
@@ -67,7 +67,7 @@ def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
 # really this is only one file
 def parse_many(files, output, overwrite=False, dryrun=False):
     if os.path.isdir(files):
-        file_one = f'{files}/compustat.csv'
+        file_one = os.path.join(files, 'compustat.csv')
     else:
         file_one = files
 

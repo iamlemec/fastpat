@@ -84,8 +84,7 @@ def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
     fdir, fname = os.path.split(fpath)
     ftag, fext = os.path.splitext(fname)
 
-    opath = os.path.join(output, ftag)
-    opath_assign = f'{opath}_assign.csv'
+    opath_assign = os.path.join(output, f'assign_{ftag}.csv')
 
     if not overwrite:
         if os.path.exists(opath_assign):
