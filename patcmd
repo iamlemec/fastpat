@@ -8,8 +8,21 @@ from importlib import resources
 from pathlib import Path
 
 import patents
-from patents import fetch_many, parse_apply, parse_grant, parse_assign, parse_maint
+from patents import (
+    fetch, parse_apply, parse_grant, parse_assign, parse_maint, parse_tmapply, parse_compustat
+)
 
+# parser dispatcher
+parsers = {
+    'apply': parse_apply,
+    'grant': parse_grant,
+    'assign': parse_assign,
+    'maint': parse_maint,
+    'tmapply': parse_tmapply,
+    'compustat': parse_compustat,
+}
+
+# get path with fallbacks
 def get_path(path, env):
     if path is None:
         if env in os.environ:
@@ -19,6 +32,7 @@ def get_path(path, env):
     else:
         return Path(path)
 
+# read list files
 def get_lines(fpath):
     return [
         s.strip() for s in fpath.read_text().split('\n') if len(s) > 0
@@ -44,21 +58,15 @@ class Main:
         flist = get_lines(fpath)
 
         output = self.datapath / 'raw' / ftype
-        fetch_many(flist, output, delay=delay, overwrite=overwrite, dryrun=dryrun)
+        fetch(flist, output, delay=delay, overwrite=overwrite, dryrun=dryrun)
 
     def parse(self, ftype, files=None, overwrite=False, dryrun=False):
         if files is None:
             files = self.datapath / 'raw' / ftype
         output = self.datapath / 'parsed' / ftype
 
-        if ftype == 'apply':
-            parse_apply(files, output, overwrite=overwrite, dryrun=dryrun)
-        elif ftype == 'grant':
-            parse_grant(files, output, overwrite=overwrite, dryrun=dryrun)
-        elif ftype == 'assign':
-            parse_assign(files, output, overwrite=overwrite, dryrun=dryrun)
-        elif ftype == 'maint':
-            parse_maint(files, output, overwrite=overwrite, dryrun=dryrun)
+        if ftype in parsers:
+            parsers[ftype](files, output, overwrite=overwrite, dryrun=dryrun)
         else:
             print(f'Error: unknown data source "{ftype}"')
 

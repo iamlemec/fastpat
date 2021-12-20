@@ -6,9 +6,11 @@ import os
 import glob
 from collections import defaultdict
 from traceback import print_exc
-from tools.parse import *
-from tools.tables import ChunkWriter, DummyWriter
+from multiprocessing import Pool
 from lxml.etree import iterparse
+
+from ..tools.parse import *
+from ..tools.tables import ChunkWriter, DummyWriter
 
 def parse_tmapply(elem, fname):
     tma = defaultdict(str)
@@ -82,15 +84,14 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
     opath = os.path.join(output, ftag)
     opath_tma = f'{opath}_tmapply.csv'
 
-    if not overwrite:
-        if os.path.exists(opath_tma):
-            print(f'{ftag}: Skipping')
-            return
+    if not overwrite and os.path.exists(opath_tma):
+        print(f'{ftag}: Skipping')
+        return
 
-    if not dryrun:
-        chunker_tma = ChunkWriter(opath_tma, schema=schema_tmapply)
-    else:
+    if dryrun:
         chunker_tma = DummyWriter()
+    else:
+        chunker_tma = ChunkWriter(opath_tma, schema=schema_tmapply)
 
     # parse it up
     try:
@@ -108,7 +109,11 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
             # output
             if display > 0 and i % display == 0:
                 stma = {k: tma.get(k, '') for k in schema_tmapply}
-                print('fn = {file:30.30s}, sn = {serial:10.10s}, rd = {regdate:10.10s}, ic = {int_class:10.10s}, gs = {gs_codes:15.15s}, st = {statement:50.50s}, ow = {owners:30.30s}'.format(**stma))
+                print(
+                    'fn = {file:30.30s}, sn = {serial:10.10s}, rd = {regdate:10.10s}, '
+                    'ic = {int_class:10.10s}, gs = {gs_codes:15.15s}, st = {statement:50.50s}, '
+                    'ow = {owners:30.30s}'.format(**stma)
+                )
 
         # commit to db and close
         chunker_tma.commit()
@@ -120,36 +125,26 @@ def parse_file(fpath, output, overwrite=False, dryrun=False, display=0):
 
         chunker_tma.delete()
 
-if __name__ == '__main__':
-    import argparse
-    from multiprocessing import Pool
-
-    # parse input arguments
-    parser = argparse.ArgumentParser(description='trademark application parser')
-    parser.add_argument('target', type=str, nargs='*', help='path or directory of file(s) to parse')
-    parser.add_argument('--output', type=str, default='parsed/tmapply', help='directory to output to')
-    parser.add_argument('--display', type=int, default=10000, help='how often to display summary')
-    parser.add_argument('--dryrun', action='store_true', help='do not actually store')
-    parser.add_argument('--overwrite', action='store_true', help='clobber existing files')
-    parser.add_argument('--threads', type=int, default=10, help='number of threads to use')
-    args = parser.parse_args()
+# main entry point
+def parse_many(files, output, threads=10, display=1_000, overwrite=False, dryrun=False):
+    # needed for multiprocess
+    global parse_file_opts
 
     # collect files
-    if len(args.target) == 0 or (len(args.target) == 1 and os.path.isdir(args.target[0])):
-        targ_dir = 'data/tmapply' if len(args.target) == 0 else args.target[0]
-        file_list = sorted(glob.glob(f'{targ_dir}/apc*.xml'))
+    if type(files) is str or isinstance(files, os.PathLike):
+        file_list = sorted(glob.glob(f'{files}/apc*.xml'))
     else:
-        file_list = args.target
+        file_list = files
 
     # ensure output dir
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
+    if not dryrun and not os.path.exists(output):
+        print(f'Creating directory {output}')
+        os.makedirs(output)
 
     # apply options
-    opts = dict(overwrite=args.overwrite, dryrun=args.dryrun, display=args.display)
     def parse_file_opts(fpath):
-        parse_file(fpath, args.output, **opts)
+        parse_file(fpath, output, display=display, overwrite=overwrite, dryrun=dryrun)
 
     # parse files
-    with Pool(args.threads) as pool:
+    with Pool(threads) as pool:
         pool.map(parse_file_opts, file_list, chunksize=1)
