@@ -1,21 +1,13 @@
-# match citation data with aggregated firm data (to be run before firm_merge.py)
+# match citation data with aggregated firm data (to be run before firm merge)
 
-import argparse
+import os
 import numpy as np
 import pandas as pd
-from tools.tables import read_csv
 
-# parse input arguments
-parser = argparse.ArgumentParser(description='Merge patent citation data.')
-parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
-parser.add_argument('--chunk', type=int, default=10000000, help='chunk size for citations')
-args = parser.parse_args()
-
-# load in grant data
-grants = read_csv(f'{args.output}/grant_firm.csv').set_index('patnum')
+from ..tools.tables import read_csv
 
 # match and aggregates cites
-def aggregate_cites(cites):
+def aggregate_chunk(cites, grants):
     print(len(cites))
 
     # match citations to firms with patnum
@@ -35,8 +27,16 @@ def aggregate_cites(cites):
 
     return stats
 
-# loop over citation chunks (otherwise requires >32GB of RAM)
-request = read_csv(f'{args.output}/grant_cite.csv', chunksize=args.chunk)
-cite_stats = pd.concat([aggregate_cites(df) for df in request], axis=0)
-cite_stats = cite_stats.groupby('patnum').sum() # since patents can span multiple chunks
-cite_stats.to_csv(f'{args.output}/cite_stats.csv')
+def aggregate_cites(output, chunksize=10000000):
+    grant_path = os.path.join(output, 'grant_firm.csv')
+    cite_path = os.path.join(output, 'grant_cite.csv')
+    stats_path = os.path.join(output, 'cite_stats.csv')
+
+    # load in grant data
+    grants = read_csv(grant_path).set_index('patnum')
+    request = read_csv(cite_path, chunksize=chunksize)
+
+    # loop over citation chunks (otherwise requires >32GB of RAM)
+    cite_stats = pd.concat([aggregate_chunk(df, grants) for df in request], axis=0)
+    cite_stats = cite_stats.groupby('patnum').sum() # since patents can span multiple chunks
+    cite_stats.to_csv(stats_path)

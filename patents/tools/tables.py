@@ -18,7 +18,8 @@ dtypes = {
     'assignor': 'str',
     'assignee': 'str',
     'firm_num': 'Int64',
-    'assignid': 'Int64',
+    'assignid': 'str',
+    'bulkid': 'str',
     'id': 'Int64',
     'id1': 'Int64',
     'id2': 'Int64',
@@ -26,14 +27,12 @@ dtypes = {
     'name1': 'str',
     'name2': 'str',
     'src': 'str',
-    'dst': 'str'
+    'dst': 'str',
 }
 
 # read csv with proper types
 def read_csv(fname, **kwargs):
-    dt = dtypes.copy()
-    if 'dtype' in kwargs:
-        dt.update(kwargs.pop('dtype'))
+    dt = {**dtypes, **kwargs.pop('dtype', {})}
     return pd.read_csv(fname, dtype=dt, **kwargs)
 
 def astype(data, dtype):

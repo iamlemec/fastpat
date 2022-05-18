@@ -6,11 +6,16 @@ from collections import defaultdict
 import numpy as np
 import xxhash
 
+# add current path
+import os
 import sys
+own_path, _ = os.path.split(__file__)
+sys.path.insert(0, own_path)
+
+# import cython
 import pyximport
 pyximport.install()
-sys.path.insert(0, 'tools')
-import simcore as csimcore
+import simcore as simcore
 
 # k-shingles: pairs of adjacent k-length substrings (in order)
 def shingle(s, k=2):
@@ -49,7 +54,7 @@ class Simhash:
 # compute actual simhash with C - only 64 width
 class CSimhash():
     def __init__(self):
-        self.simcore = csimcore.simcore
+        self.simcore = simcore.simcore
 
     def simhash(self, features, weights=None):
         if weights is None:

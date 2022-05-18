@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# coding: UTF-8
-
 import os
 import glob
 import numpy as np
@@ -56,7 +53,7 @@ def get_date(fpath):
     return int(date)
 
 # really this is only one file
-def parse_many(files, output, overwrite=False, dryrun=False):
+def parse_many(files, output, overwrite=False, dryrun=False, threads=None):
     if os.path.isdir(files):
         # get latest file
         maint_files = glob.glob(f'{files}/MaintFeeEvents_*.txt')

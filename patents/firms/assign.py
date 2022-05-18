@@ -1,12 +1,8 @@
-import argparse
+import os
 import pandas as pd
-from tools.standardize import standardize_strong
-from tools.tables import read_csv
 
-# parse input arguments
-parser = argparse.ArgumentParser(description='USPTO assign fixer.')
-parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
-args = parser.parse_args()
+from ..tools.standardize import standardize_strong
+from ..tools.tables import read_csv
 
 # detect same entity transfers
 def same_entity(assignor, assignee):
@@ -254,20 +250,31 @@ country_map = {
     'burundi': 'bi'
 }
 
-# eliminate assignments within entities
-assn = read_csv(f'{args.output}/assign_assign.csv')
-assn = assn.dropna(subset=['patnum', 'execdate'], axis=0)
-assn['assignee_state'] = assn['assignee_state'].map(state_map)
-assn['assignee_country'] = assn['assignee_country'].map(country_map)
-assn['same'] = assn[['assignor', 'assignee']].apply(lambda x: same_entity(*x), raw=True, axis=1)
-good = assn[~assn['same']].drop('same', axis=1)
-good = good.reset_index(drop=True).rename_axis('assignid', axis=0).reset_index()
-good.to_csv(f'{args.output}/assign_use.csv', index=False)
+def prune_assign(output):
+    spath = os.path.join(output, 'assign_assign.csv')
+    assn = read_csv(spath)
 
-# aggregated assignment stats
-pat_group = good.groupby('patnum')
-assign_stats = pd.DataFrame({
-    'first_trans': pat_group['execdate'].min(),
-    'n_trans': pat_group.size()
-}).reset_index()
-assign_stats.to_csv(f'{args.output}/assign_stats.csv', index=False)
+    # eliminate duplicate records - assume chronological order
+    assn = assn.drop_duplicates('assignid', keep='last')
+    assn = assn.dropna(subset=['patnum', 'execdate'], axis=0)
+
+    # eliminate assignments within entities
+    assn['assignee_state'] = assn['assignee_state'].map(state_map)
+    assn['assignee_country'] = assn['assignee_country'].map(country_map)
+    assn['same'] = assn[['assignor', 'assignee']].apply(
+        lambda x: same_entity(*x), raw=True, axis=1
+    )
+    good = assn[~assn['same']].drop('same', axis=1)
+
+    gpath = os.path.join(output, 'assign_use.csv')
+    good.to_csv(gpath, index=False)
+
+    # aggregated assignment stats
+    pat_group = good.groupby('patnum')
+    assign_stats = pd.DataFrame({
+        'first_trans': pat_group['execdate'].min(),
+        'n_trans': pat_group.size()
+    }).reset_index()
+
+    apath = os.path.join(output, 'assign_stats.csv')
+    assign_stats.to_csv(apath, index=False)

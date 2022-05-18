@@ -4,32 +4,49 @@ Parse patent application, grant, assignment, and maintenance info from [USPTO Bu
 
 ### Requirements
 
-For parsing, you'll need: `numpy`, `pandas`, and `lxml`. For firm clustering, you'll additionally need: `xxhash`, `editdistance`, `networkx`, and `Cython`. All of these are available through both `pip` and `conda`.
+In general, you'll need the `fire` library. For parsing, you'll need: `numpy`, `pandas`, and `lxml`. For firm clustering, you'll additionally need: `xxhash`, `editdistance`, `networkx`, and `Cython`. All of these are available through both `pip` and `conda`.
 
 ### Usage
 
-Below is the pipeline that you'll want to follow. The entire process is designed to idempotent, meaning you can rerun any step to propagate updates.
+Most common tasks can be executed through the `patcmd` interface. For more advanced usage, you can also directly interface the functions in the library itself. When using `patcmd` you have to specify the data directory. You either do this by passing the `--datadir` flag directly or by setting the environment variable `PATENTS_DATADIR`.
 
 #### Downloading Data
 
-You can download and extract the raw XML data files using the `fetch_*.py` files. These look in the respective `meta/*_files.txt` for the list of files to download and store them in the corresponding `data/*`. The fetch scripts by default will not overwrite existing files and will only download those that are absent.
+The following USPTO data sources are supported
+- `grant`: patent grants
+- `apply`: patent applications
+- `assign`: patent resassignments
+- `maint`: patent maintenance events
+- `tmapply`: trademark applications
+
+To download the files for data source `SOURCE`, run the command
+``` bash
+patcmd fetch SOURCE
+```
+
+This library ships with a list of source files for each type, however this will become out of date over time. As such, you can also specify your own metadata path containing these files. You can do this by passing the `--metadir` flag directly or by setting the `PATENTS_METADIR` environment variable.
 
 #### Parsing Data
 
-Parsing is done using the `parse_*.py` scripts. In the case of `apply`, `grant`, `assign`, this will output to separate files in `parsed/*` so as to allow for multi-threaded parsing. Running `load_data.py` afterwards will combine these intermediate files into unified files in `tables`. Conversely, `parse_maint.py` and `parse_compustat.py` output directly to `tables`.
+Parsing works similarly to fetching. Simply run
+``` bash
+patcmd parse SOURCE
+```
+for one of the sources listed above.
 
 #### Firm Clustering
 
-If you're parsing patent assignments, run `firm_assign.py` to flag assignments between the same entity. To cluster firms into common entities based on name similarity, run `firm_cluster.py`. You can use the `sources` option to control which names are included. Run `firm_cites.py` to aggregate citation information to the patent level and account for self citations.
-
-Finally, run `firm_merge.py` to merge all of the above into a firm-year panel. This last step requires applications, grants, assignments, and maintenance events to be used (Compustat is optional).
+This is a bit more bespoke, and you may want to change things to suit your needs. But in general, there are four subcommands you can pass to `patcmd firms`: `assign` which eliminates duplicate or redundant patent transfers from the reassignment data, `cluster` which groups firm names into common entities using locality sensitive matching and Levenshtein distance, `cites` which aggregates citation data to the patent level, and `merge` which brings it all together into a firm-year panel. The simplest thing is to simply run these subcommands in order.
 
 ### Example
 
 Suppose you just want to parse patent grants. To do this, you would go through the following steps:
 
-1. Fetch the grant data with `fetch_grant.py`.
-2. Parse the grant data with `parse_grant.py`.
-3. Load the grant data with `load_data.py grant`.
-4. Cluster firm names with `firm_cluster.py grant`.
-5. Process citations with `firm_cites.py`.
+1. Fetch the grant data with `patcmd fetch grant`
+2. Parse the grant data with `patcmd parse grant`
+4. Cluster firm names with `patcmd firms cluster --sources grant`
+5. Process citations with `patcmd firms cites`
+
+### Migration
+
+If you've been using older versions of this repository, the new data layout is slightly different. To avoid having to re-download everything, you can move the contents of your `data` directly to `data/raw` and using `data` as the data directory path that you pass to `patcmd`. It's probably best to then re-parse everything and remove the `parsed` and `tables` directories.

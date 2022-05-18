@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# coding: UTF-8
-
 import re
 import os
 import glob
@@ -23,6 +20,9 @@ def parse_assign_gen3(elem, fname):
     assignor = elem.find('patent-assignors')[0]
     assignee = elem.find('patent-assignees')[0]
     patents = elem.find('patent-properties')
+
+    # assign id = reel-no + frame-no
+    pat['bulkid'] = get_text(record, 'reel-no') + get_text(record, 'frame-no').zfill(3)
 
     # conveyance
     pat['conveyance'] = get_text(record, 'conveyance-text')
@@ -53,6 +53,8 @@ def parse_file_gen3(fpath):
 
 # table schema
 schema_assign = {
+    'assignid': 'str', # Assign ID
+    'bulkid': 'str', # Group ID
     'patnum': 'str', # Patent number
     'execdate': 'str', # Execution date
     'recdate': 'str', # Reception date
@@ -75,8 +77,9 @@ def store_patent(pat, chunker_assign):
         return
 
     # store assign
-    for pn in pat['patnums']:
+    for i, pn in enumerate(pat['patnums']):
         pat['patnum'] = pn
+        pat['assignid'] = pat['bulkid'] + '_' + str(i)
         chunker_assign.insert(*(pat[k] for k in schema_assign))
 
 # file level

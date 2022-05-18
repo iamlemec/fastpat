@@ -1,16 +1,17 @@
 import numpy as np
 import pandas as pd
 from itertools import chain
-from tools.tables import read_csv
 
-def merge_grants(output='tables'):
+from ..tools.tables import read_csv
+
+def merge_grants(output):
     print('Merging all grant data')
 
     grant = read_csv(f'{output}/grant_grant.csv').set_index('patnum')
     firm = read_csv(f'{output}/grant_firm.csv').set_index('patnum')
     cite = read_csv(f'{output}/cite_stats.csv').set_index('patnum')
     assign = read_csv(f'{output}/assign_stats.csv').set_index('patnum')
-    maint = read_csv(f'{output}/maint.csv').set_index('patnum')
+    maint = read_csv(f'{output}/maint_maint.csv').set_index('patnum')
 
     grant = grant.join(firm)
     grant = grant.join(cite)
@@ -26,7 +27,7 @@ def merge_grants(output='tables'):
     grant.drop('abstract', axis=1).to_csv(f'{output}/grant_info.csv')
     grant[['title', 'abstract']].to_csv(f'{output}/grant_text.csv')
 
-def generate_firmyear(output='tables', compustat=False):
+def generate_firmyear(output, compustat=False):
     print('Generating all firm-years')
 
     total = []
@@ -72,12 +73,16 @@ def generate_firmyear(output='tables', compustat=False):
 
     # compustat firms
     if compustat:
-        compu = read_csv(f'{output}/compustat.csv')
+        compu = read_csv(f'{output}/compustat_compustat.csv')
         compu_firm = read_csv(f'{output}/compustat_firm.csv').set_index('compid')
         compu = compu.join(compu_firm, on='compid', how='inner')
 
-        compu_fy = compu.groupby(['firm_num', 'year'])[['assets', 'capx', 'cash', 'cogs', 'deprec', 'income', 'employ', 'intan', 'debt', 'revenue', 'sales', 'rnd', 'fcost', 'mktval']].sum()
-        ind_info = compu.groupby(['firm_num', 'year'])[['naics', 'sic']].first()
+        compu_grp = compu.groupby(['firm_num', 'year'])
+        compu_fy = compu_grp[[
+            'assets', 'capx', 'cash', 'cogs', 'deprec', 'income', 'employ',
+            'intan', 'debt', 'revenue', 'sales', 'rnd', 'fcost', 'mktval'
+        ]].sum()
+        ind_info = compu_grp[['naics', 'sic']].first()
         compu_fy = compu_fy.join(ind_info)
         total.append(compu_fy)
 
@@ -88,7 +93,7 @@ def generate_firmyear(output='tables', compustat=False):
 
     total.to_csv(f'{output}/firmyear_info.csv', index=False, float_format='%.3f')
 
-def firm_statistics(output='tables'):
+def firm_statistics(output):
     print('Finding firm statistics')
 
     # firm history statistics
@@ -120,7 +125,7 @@ def firm_statistics(output='tables'):
 
     firm_life.to_csv(f'{output}/firm_life.csv', float_format='%.3f')
 
-def patent_stocks(output='tables'):
+def patent_stocks(output):
     print('Constructing patent stocks')
 
     # load firm data
@@ -156,17 +161,8 @@ def patent_stocks(output='tables'):
     # write new frame to disk
     datf_idx.to_csv(f'{output}/firmyear_index.csv', index=False, float_format='%.3f')
 
-if __name__ == "__main__":
-    import argparse
-
-    # parse input arguments
-    parser = argparse.ArgumentParser(description='Merge firm patent data.')
-    parser.add_argument('--output', type=str, default='tables', help='directory to operate on')
-    parser.add_argument('--compustat', action='store_true', help='include compustat in merge')
-    args = parser.parse_args()
-
-    # go through steps
-    merge_grants(output=args.output)
-    generate_firmyear(output=args.output, compustat=args.compustat)
-    firm_statistics(output=args.output)
-    patent_stocks(output=args.output)
+def merge_firms(output, compustat=False):
+    merge_grants(output)
+    generate_firmyear(output, compustat=compustat)
+    firm_statistics(output)
+    patent_stocks(output)

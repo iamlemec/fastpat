@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# coding: UTF-8
-
 import os
 import pandas as pd
 
@@ -65,7 +62,7 @@ def parse_file(fpath, output, display=0, overwrite=False, dryrun=False):
         datf.to_csv(opath, index=False, float_format='%.3f')
 
 # really this is only one file
-def parse_many(files, output, overwrite=False, dryrun=False):
+def parse_many(files, output, overwrite=False, dryrun=False, threads=None):
     if os.path.isdir(files):
         file_one = os.path.join(files, 'compustat.csv')
     else:
