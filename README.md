@@ -42,10 +42,11 @@ This is a bit more bespoke, and you may want to change things to suit your needs
 
 Suppose you just want to parse patent grants. To do this, you would go through the following steps:
 
-1. Fetch the grant data with `patcmd fetch grant`
-2. Parse the grant data with `patcmd parse grant`
-4. Cluster firm names with `patcmd firms cluster --sources grant`
-5. Process citations with `patcmd firms cites`
+0. Set up the environment with `export PATENTS_DATADIR=data`
+1. Fetch the grant data with `./patcmd fetch grant`
+2. Parse the grant data with `./patcmd parse grant`
+4. Cluster firm names with `./patcmd firms cluster --sources grant`
+5. Process citations with `./patcmd firms cites`
 
 ### Migration
 
