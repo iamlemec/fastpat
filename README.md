@@ -8,7 +8,7 @@ In general, you'll need the `fire` library. For parsing, you'll need: `numpy`, `
 
 ### Usage
 
-Most common tasks can be executed through the `patcmd` interface. For more advanced usage, you can also directly interface the functions in the library itself. When using `patcmd` you have to specify the data directory. You either do this by passing the `--datadir` flag directly or by setting the environment variable `PATENTS_DATADIR`.
+Most common tasks can be executed through the `patcmd` interface. For more advanced usage, you can also directly call the functions in the library itself. When using `patcmd` you have to specify the data directory. You can either do this by passing the `--datadir` flag directly or by setting the environment variable `PATENTS_DATADIR`.
 
 #### Downloading Data
 
@@ -21,22 +21,22 @@ The following USPTO data sources are supported
 
 To download the files for data source `SOURCE`, run the command
 ``` bash
-patcmd fetch SOURCE
+./patcmd fetch SOURCE
 ```
 
-This library ships with a list of source files for each type, however this will become out of date over time. As such, you can also specify your own metadata path containing these files. You can do this by passing the `--metadir` flag directly or by setting the `PATENTS_METADIR` environment variable.
+This library ships with a list of source files for each type, however this will become out of date over time. As such, you can also specify your own metadata path containing these files. You can do this by passing the `--metadir` flag directly or by setting the `PATENTS_METADIR` environment variable. If you've cloned this repository locally, you can also update the files in `patents/meta`.
 
 #### Parsing Data
 
 Parsing works similarly to fetching. Simply run
 ``` bash
-patcmd parse SOURCE
+./patcmd parse SOURCE
 ```
 for one of the sources listed above.
 
 #### Firm Clustering
 
-This is a bit more bespoke, and you may want to change things to suit your needs. But in general, there are four subcommands you can pass to `patcmd firms`: `assign` which eliminates duplicate or redundant patent transfers from the reassignment data, `cluster` which groups firm names into common entities using locality sensitive matching and Levenshtein distance, `cites` which aggregates citation data to the patent level, and `merge` which brings it all together into a firm-year panel. The simplest thing is to simply run these subcommands in order.
+This step is a bit more bespoke, and you may want to change things to suit your needs. But in general, there are four subcommands you can pass to `patcmd firms`: `assign` which eliminates duplicate or redundant patent transfers from the reassignment data, `cluster` which groups firm names into common entities using locality sensitive matching and Levenshtein distance, `cites` which aggregates citation data to the patent level, and `merge` which brings it all together into a firm-year panel. The simplest thing is to simply run these subcommands in order.
 
 ### Example
 
@@ -50,4 +50,4 @@ Suppose you just want to parse patent grants. To do this, you would go through t
 
 ### Migration
 
-If you've been using older versions of this repository, the new data layout is slightly different. To avoid having to re-download everything, you can move the contents of your `data` directly to `data/raw` and using `data` as the data directory path that you pass to `patcmd`. It's probably best to then re-parse everything and remove the `parsed` and `tables` directories.
+If you've been using older versions of this repository, the new data layout is slightly different. To avoid having to re-download everything, you can move the contents of your `data` directly to `data/raw` and use `data` as the data directory path that you pass to `patcmd`. It's probably best to then re-parse everything and remove the `parsed` and `tables` directories.
