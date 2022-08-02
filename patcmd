@@ -6,8 +6,8 @@ import fire
 from importlib import resources
 from pathlib import Path
 
-import patents
-from patents import (
+import fastpat
+from fastpat import (
     fetch_many, concat_tables, parse_apply, parse_grant, parse_assign,
     parse_maint, parse_tmapply, parse_compustat, cluster_firms, prune_assign,
     aggregate_cites, merge_firms
@@ -49,7 +49,7 @@ class Main:
             sys.exit()
 
         if self.metapath is None:
-            self.metapath = resources.files(patents) / 'meta'
+            self.metapath = resources.files(fastpat) / 'meta'
 
     def stat(self):
         print(f'datapath: {self.datapath}')
