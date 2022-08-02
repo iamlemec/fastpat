@@ -58,6 +58,12 @@ If you want to work with applications, grants, reassignment, and maintenance, yo
 5. Process citations with `./patcmd firms cites`
 6. Merge into firm-year panel with `./patcmd firms merge`
 
-### Migration
+### Data Updates
+
+Continual data updating works very well for applications and grants. Only new files will be downloaded and unzipped. The way the patent office constructs the assignment data means that you'll have to delete it and re-download it roughly once a year. Similarly, maintenance information is stored in a single file, so to update that, you'll need to delete the data file `raw/maint/MaintFeeEvents.zip` and rerun the fetch command.
+
+The parsing code will also only parse new files. If you wish to rerun the parsing step for a given file, either delete its outputs (in the `parsed` data directory) or pass the `--overwrite` flag (this works for the fetching step too). The clustering and merging steps must be run for any update to propagate the changes throughout. These will take about the same amount of time even for small updates, as they are undertaking global computations. Every command is idempotent, meaning it can be rerun without breaking anything.
+
+#### Migration
 
 If you've been using older versions of this repository, the new data layout is slightly different. To avoid having to re-download everything, you can move the contents of your `data` directly to `data/raw` and use `data` as the data directory path that you pass to `patcmd`. It's probably best to then re-parse everything and remove the `parsed` and `tables` directories.
