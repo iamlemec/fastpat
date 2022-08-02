@@ -16,12 +16,12 @@ classifiers = [
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
 ]
-keywords = ['patents', 'clutering', 'economics']
+keywords = ['patents', 'clustering', 'economics']
 dependencies = ['fire', 'numpy', 'pandas', 'lxml', 'xxhash', 'editdistance', 'networkx', 'Cython']
 requires-python = '>=3.7'
 
 [project.scripts]
-patcmd = 'fastpat:cli.main'
+fastpat = 'fastpat:cli.main'
 
 [project.urls]
 Homepage = 'http://github.com/iamlemec/fastpat'
