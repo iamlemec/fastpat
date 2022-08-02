@@ -3,6 +3,7 @@ screenlog.*
 *.pyc
 .ipynb_checkpoints
 __pychache__
+fastpat.egg-info
 dist
 info
 data

@@ -20,8 +20,14 @@ keywords = ['patents', 'clutering', 'economics']
 dependencies = ['fire', 'numpy', 'pandas', 'lxml', 'xxhash', 'editdistance', 'networkx', 'Cython']
 requires-python = '>=3.7'
 
+[project.scripts]
+patcmd = 'fastpat:cli.main'
+
 [project.urls]
 Homepage = 'http://github.com/iamlemec/fastpat'
 
-[tool.setuptools.packages.find]
-include = ['fastpat']
+[tool.setuptools]
+packages = ['fastpat', 'fastpat.tools', 'fastpat.parse', 'fastpat.firms']
+
+[tool.setuptools.package-data]
+fastpat = ['meta/*.txt', 'tools/simcore.pyx']

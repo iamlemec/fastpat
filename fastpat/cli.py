@@ -6,11 +6,10 @@ import fire
 from importlib import resources
 from pathlib import Path
 
-import fastpat
-from fastpat import (
+from . import (
     fetch_many, concat_tables, parse_apply, parse_grant, parse_assign,
-    parse_maint, parse_tmapply, parse_compustat, cluster_firms, prune_assign,
-    aggregate_cites, merge_firms
+    parse_assign, parse_maint, parse_tmapply, parse_compustat, cluster_firms,
+    prune_assign, aggregate_cites, merge_firms
 )
 
 # parser dispatcher
@@ -49,7 +48,7 @@ class Main:
             sys.exit()
 
         if self.metapath is None:
-            self.metapath = resources.files(fastpat) / 'meta'
+            self.metapath = resources.files('fastpat') / 'meta'
 
     def stat(self):
         print(f'datapath: {self.datapath}')
@@ -92,5 +91,5 @@ class Main:
         else:
             print(f'Error: unknown firm action "{action}"')
 
-if __name__ == '__main__':
+def main():
     fire.Fire(Main)

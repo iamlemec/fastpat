@@ -13,9 +13,12 @@ own_path, _ = os.path.split(__file__)
 sys.path.insert(0, own_path)
 
 # import cython
-import pyximport
-pyximport.install()
-import simcore as simcore
+try:
+    import pyximport
+    pyximport.install()
+    import simcore as simcore
+except:
+    pass
 
 # k-shingles: pairs of adjacent k-length substrings (in order)
 def shingle(s, k=2):
