@@ -55,7 +55,7 @@ class Main:
         print(f'datapath: {self.datapath}')
         print(f'metapath: {self.metapath}')
 
-    def fetch(self, ftype, files=None, delay=10, overwrite=False, dryrun=False):
+    def fetch(self, ftype, files=None, delay=10, overwrite=False, unzip=False, dryrun=False):
         if files is None:
             fpath = self.metapath / f'{ftype}_files.txt'
         else:
@@ -63,7 +63,7 @@ class Main:
         flist = get_lines(fpath)
 
         output = self.datapath / 'raw' / ftype
-        fetch_many(flist, output, delay=delay, overwrite=overwrite, dryrun=dryrun)
+        fetch_many(flist, output, delay=delay, overwrite=overwrite, unzip=unzip, dryrun=dryrun)
 
     def parse(self, ftype, path=None, concat=True, overwrite=False, dryrun=False, threads=10):
         if path is None:

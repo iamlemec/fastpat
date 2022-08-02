@@ -1,7 +1,7 @@
 import os
 import time
 
-def fetch_file(zurl, output, overwrite=False, dryrun=False):
+def fetch_file(zurl, output, overwrite=False, dryrun=False, unzip=False):
     system = print if dryrun else os.system
     zflags = '' if overwrite else '-n'
 
@@ -11,16 +11,20 @@ def fetch_file(zurl, output, overwrite=False, dryrun=False):
 
     _, zname = os.path.split(zurl)
     zpath = os.path.join(output, zname)
+    fetch = overwrite or not os.path.isfile(zpath)
 
-    if overwrite or not os.path.isfile(zpath):
+    if fetch:
         print(f'Fetching {zname}')
         system(f'curl -o {zpath} {zurl}')
 
-    print(f'Unzipping {zname}')
-    system(f'unzip {zflags} {zpath} -d {output}')
+    if fetch or unzip:
+        print(f'Unzipping {zname}')
+        system(f'unzip {zflags} {zpath} -d {output}')
+
+    return fetch
 
 def fetch_many(files, output, delay=10, dryrun=False, **kwargs):
     for zurl in files:
-        fetch_file(zurl, output, dryrun=dryrun, **kwargs)
-        if not dryrun:
+        fetch = fetch_file(zurl, output, dryrun=dryrun, **kwargs)
+        if fetch and not dryrun:
             time.sleep(delay)

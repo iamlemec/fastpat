@@ -4,7 +4,7 @@ Parse patent application, grant, assignment, and maintenance info from [USPTO Bu
 
 ### Requirements
 
-In general, you'll need the `fire` library. For parsing, you'll need: `numpy`, `pandas`, and `lxml`. For firm clustering, you'll additionally need: `xxhash`, `editdistance`, `networkx`, and `Cython`. All of these are available through both `pip` and `conda`.
+In general, you'll need the `fire` library. For parsing, you'll need: `numpy`, `pandas`, and `lxml`. For firm clustering, you'll additionally need: `xxhash`, `editdistance`, `networkx`, and `Cython`. All of these are available through both `pip` and `conda`. You can install all the requirements with `pip` by running: `pip install -r requirements.txt`.
 
 ### Usage
 
@@ -17,11 +17,11 @@ The following USPTO data sources are supported
 - `apply`: patent applications
 - `assign`: patent resassignments
 - `maint`: patent maintenance events
-- `tmapply`: trademark applications
+- `tmapply`: trademark applications (preliminary)
 
 To download the files for data source `SOURCE`, run the command
 ``` bash
-patcmd fetch SOURCE
+./patcmd fetch SOURCE
 ```
 
 This library ships with a list of source files for each type, however this will become out of date over time. As such, you can also specify your own metadata path containing these files. You can do this by passing the `--metadir` flag directly or by setting the `PATENTS_METADIR` environment variable.
@@ -30,7 +30,7 @@ This library ships with a list of source files for each type, however this will 
 
 Parsing works similarly to fetching. Simply run
 ``` bash
-patcmd parse SOURCE
+./patcmd parse SOURCE
 ```
 for one of the sources listed above.
 
@@ -48,6 +48,16 @@ Suppose you just want to parse patent grants. To do this, you would go through t
 4. Cluster firm names with `./patcmd firms cluster --sources grant`
 5. Process citations with `./patcmd firms cites`
 
+If you want to work with applications, grants, reassignment, and maintenance, you can run the following
+
+0. Set up the environment with `export PATENTS_DATADIR=data`
+1. Fetch all the data with `./patcmd fetch SOURCE` for each of `SOURCE` in `apply`, `grant`, `assign`, `maint` (four separate commands)
+2. Parse all the data with `./patcmd parse SOURCE` for each of `SOURCE` in `apply`, `grant`, `assign`, `maint` (four separate commands)
+3. Prune the resassignment data with `./patcmd firms assign`
+4. Cluster firm names with `./patcmd firms cluster --sources apply,grant,assign,maint`
+5. Process citations with `./patcmd firms cites`
+6. Merge into firm-year panel with `./patcmd firms merge`
+
 ### Migration
 
-If you've been using older versions of this repository, the new data layout is slightly different. To avoid having to re-download everything, you can move the contents of your `data` directly to `data/raw` and using `data` as the data directory path that you pass to `patcmd`. It's probably best to then re-parse everything and remove the `parsed` and `tables` directories.
+If you've been using older versions of this repository, the new data layout is slightly different. To avoid having to re-download everything, you can move the contents of your `data` directly to `data/raw` and use `data` as the data directory path that you pass to `patcmd`. It's probably best to then re-parse everything and remove the `parsed` and `tables` directories.
