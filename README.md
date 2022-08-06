@@ -8,7 +8,7 @@ In general, you'll need the `fire` library. For parsing, you'll need: `numpy`, `
 
 ### Usage
 
-Most common tasks can be executed through the `fastpat` command. For more advanced usage, you can also directly call the functions in the library itself. When using `fastpat` you have to specify the data directory. You can either do this by passing the `--datadir` flag directly or by setting the environment variable `PATENTS_DATADIR`. If you've cloned the repository locally, you have to run `python3 -m fastpat` instead of `fastpat`.
+Most common tasks can be executed through the `fastpat` command. For more advanced usage, you can also directly call the functions in the library itself. When using `fastpat` you have to specify the data directory. You can either do this by passing the `--datadir` flag directly or by setting the environment variable `FASTPAT_DATADIR`. If you've cloned the repository locally, you have to run `python3 -m fastpat` instead of `fastpat`.
 
 #### Downloading Data
 
@@ -24,7 +24,7 @@ To download the files for data source `SOURCE`, run the command
 fastpat fetch SOURCE
 ```
 
-This library ships with a list of source files for each type, however this will become out of date over time. As such, you can also specify your own metadata path containing these files. You can do this by passing the `--metadir` flag directly or by setting the `PATENTS_METADIR` environment variable. If you've cloned this repository locally, you can also update the files in `fastpat/meta`.
+This library ships with a list of source files for each type, however this will become out of date over time. As such, you can also specify your own metadata path containing these files. You can do this by passing the `--metadir` flag directly or by setting the `FASTPAT_METADIR` environment variable. If you've cloned this repository locally, you can also update the files in `fastpat/meta`.
 
 #### Parsing Data
 
@@ -42,7 +42,7 @@ This step is a bit more bespoke, and you may want to change things to suit your 
 
 Suppose you just want to parse patent grants. To do this, you would go through the following steps:
 
-0. Set up the environment with `export PATENTS_DATADIR=data`
+0. Set up the environment with `export FASTPAT_DATADIR=data`
 1. Fetch the grant data with `fastpat fetch grant`
 2. Parse the grant data with `fastpat parse grant`
 4. Cluster firm names with `fastpat firms cluster --sources grant`
@@ -50,7 +50,7 @@ Suppose you just want to parse patent grants. To do this, you would go through t
 
 If you want to work with applications, grants, reassignment, and maintenance, you can run the following
 
-0. Set up the environment with `export PATENTS_DATADIR=data`
+0. Set up the environment with `export FASTPAT_DATADIR=data`
 1. Fetch all the data with `fastpat fetch SOURCE` for each of `SOURCE` in `apply`, `grant`, `assign`, `maint` (four separate commands)
 2. Parse all the data with `fastpat parse SOURCE` for each of `SOURCE` in `apply`, `grant`, `assign`, `maint` (four separate commands)
 3. Prune the resassignment data with `fastpat firms assign`

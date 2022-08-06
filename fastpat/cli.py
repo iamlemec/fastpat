@@ -40,8 +40,8 @@ def get_lines(fpath):
 
 class Main:
     def __init__(self, datadir=None, metadir=None):
-        self.datapath = get_path(datadir, 'PATENTS_DATADIR')
-        self.metapath = get_path(metadir, 'PATENTS_METADIR')
+        self.datapath = get_path(datadir, 'FASTPAT_DATADIR')
+        self.metapath = get_path(metadir, 'FASTPAT_METADIR')
 
         if self.datapath is None:
             print('Error: must specify "datadir" path')

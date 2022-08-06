@@ -27,7 +27,4 @@ fastpat = 'fastpat:cli.main'
 Homepage = 'http://github.com/iamlemec/fastpat'
 
 [tool.setuptools]
-packages = ['fastpat', 'fastpat.tools', 'fastpat.parse', 'fastpat.firms']
-
-[tool.setuptools.package-data]
-fastpat = ['meta/*.txt', 'tools/simcore.pyx']
+package-dir = { fastpat = 'fastpat' }
