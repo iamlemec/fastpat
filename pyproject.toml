@@ -6,7 +6,7 @@ build-backend = 'setuptools.build_meta'
 
 [project]
 name = 'fastpat'
-version = '0.9.1'
+version = '0.9.2'
 description = 'USPTO patent data fetcher and parser'
 readme = { file = 'README.md' , content-type = 'text/markdown' }
 authors = [{ name = 'Doug Hanley', email = 'thesecretaryofwar@gmail.com' }]
