@@ -28,6 +28,9 @@ dtypes = {
     'name2': 'str',
     'src': 'str',
     'dst': 'str',
+    'ipc': 'str',
+    'ipcver': 'str',
+    'ever_large': 'boolean',
 }
 
 # read csv with proper types

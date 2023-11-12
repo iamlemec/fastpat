@@ -1,5 +1,6 @@
 from .tools.fetch import fetch_many
 from .tools.concat import concat_tables
+from .tools.tables import read_csv
 
 from .parse.apply import parse_many as parse_apply
 from .parse.grant import parse_many as parse_grant

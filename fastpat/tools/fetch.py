@@ -1,9 +1,10 @@
 import os
 import time
+from urllib.request import urlretrieve
+from zipfile import ZipFile
 
 def fetch_file(zurl, output, overwrite=False, dryrun=False, unzip=False):
     system = print if dryrun else os.system
-    zflags = '' if overwrite else '-n'
 
     if not dryrun and not os.path.exists(output):
         print(f'Creating directory {output}')
@@ -15,11 +16,16 @@ def fetch_file(zurl, output, overwrite=False, dryrun=False, unzip=False):
 
     if fetch:
         print(f'Fetching {zname}')
-        system(f'curl -o {zpath} {zurl}')
+        try:
+            urlretrieve(zurl, zpath)
+        except:
+            print(f'Failed to fetch {zurl}')
+            return True
 
     if fetch or unzip:
         print(f'Unzipping {zname}')
-        system(f'unzip {zflags} {zpath} -d {output}')
+        with ZipFile(zpath, 'r') as zfile:
+            zfile.extractall(output)
 
     return fetch
 

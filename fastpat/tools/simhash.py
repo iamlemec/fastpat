@@ -15,7 +15,7 @@ sys.path.insert(0, own_path)
 # import cython
 try:
     import pyximport
-    pyximport.install()
+    pyximport.install(language_level=3)
     import simcore as simcore
 except:
     pass
