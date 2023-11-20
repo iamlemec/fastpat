@@ -57,7 +57,7 @@ class ChunkWriter:
         self.i = 0
         self.j = 0
 
-        self.file = open(self.path, 'w+')
+        self.file = open(self.path, 'w+', encoding='utf-8')
         header = ','.join(schema)
         self.file.write(f'{header}\n')
 
